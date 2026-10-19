@@ -97,7 +97,7 @@ export interface User {
 export interface RegisterInput {
   name: string;
   email: string;
-  password: string; // Plain password as requested (without hashing)
+  password: string;
   role: Role;
 }
 
@@ -107,6 +107,61 @@ export interface VerifyInput {
 }
 
 export interface LoginInput {
-  email: string;
   password: string;
+  email?: string;
 }
+
+export interface VerifyLoginInput {
+  email: string;
+  code: string;
+}
+
+export interface LoginStepResult {
+  success: boolean;
+  step: 'verify_otp' | 'completed';
+  email: string;
+  maskedEmail: string;
+  message: string;
+  devCode?: string;
+}
+
+export interface AuthSuccessResult {
+  success: boolean;
+  message?: string;
+  token: string;
+  user: User;
+}
+
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'info' | 'warning' | 'error';
+  message: string;
+}
+
+
+// 7-Day Weekly Routine Types
+export type DayOfWeek = 'Saturday' | 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
+
+export interface RoutineItem {
+  id: string;
+  day: DayOfWeek;
+  subject: string;
+  time_slot?: string;
+  topic?: string;
+  note?: string;
+  creator_role: Role;
+  creator_name: string;
+  created_at: string;
+}
+
+export interface CreateRoutineInput {
+  day: DayOfWeek;
+  subject: string;
+  time_slot?: string;
+  topic?: string;
+  note?: string;
+  creator_role?: Role;
+  creator_name?: string;
+}
+
+

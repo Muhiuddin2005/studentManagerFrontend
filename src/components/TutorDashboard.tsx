@@ -2,6 +2,7 @@ import React from 'react';
 import { StatusBadge, SubjectBadge, PriorityBadge } from './Badge';
 import TimelineStepper from './TimelineStepper';
 import { Task, TaskStatus } from '../types';
+import { resolveAttachmentUrl } from '../services/api';
 import { 
   AlertTriangle, 
   MessageSquare, 
@@ -154,9 +155,7 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                   {screenshots.length > 0 && (
                     <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                       {screenshots.map(s => {
-                        const imageSrc = s.file_url?.startsWith('/uploads')
-                          ? `http://localhost:5000${s.file_url}`
-                          : (s.file_url || '');
+                        const imageSrc = resolveAttachmentUrl(s.file_url);
 
                         return (
                           <div
@@ -169,14 +168,25 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                               overflow: 'hidden',
                               border: '1px solid rgba(0, 0, 0, 0.08)',
                               cursor: 'pointer',
-                              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)'
+                              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
+                              background: '#F1F3F8'
                             }}
                             title="Click to view full screenshot"
                           >
-                            <img src={imageSrc} alt="Problem screenshot" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img 
+                              src={imageSrc} 
+                              alt="Problem screenshot" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                target.onerror = null;
+                                target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='110' height='75' viewBox='0 0 110 75'%3E%3Crect width='100%25' height='100%25' fill='%23EEF0FD'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' font-weight='bold' fill='%236F65F1'%3E%F0%9F%93%B7 View Problem%3C/text%3E%3C/svg%3E";
+                              }}
+                            />
                           </div>
                         );
                       })}
+
                     </div>
                   )}
                 </div>
@@ -249,6 +259,7 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                 <TimelineStepper
                   currentStatus={task.status}
                   onStatusChange={(newStatus) => onStatusChange(task, newStatus)}
+                  userRole="tutor"
                 />
               </div>
 

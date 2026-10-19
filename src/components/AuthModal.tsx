@@ -2,43 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Mail, 
-  Lock, 
-  User as UserIcon, 
-  Sparkles, 
-  GraduationCap, 
   Eye, 
   EyeOff, 
   ArrowRight, 
   CheckCircle2, 
   AlertCircle, 
   RefreshCw,
-  KeyRound
+  KeyRound,
+  ShieldCheck
 } from 'lucide-react';
-import * as api from '../services/api';
-import { User, Role } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { Role } from '../types';
 
-interface AuthModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onLoginSuccess: (user: User) => void;
-  initialMode?: 'login' | 'register';
-}
+export const AuthModal: React.FC = () => {
+  const { 
+    isAuthModalOpen, 
+    authModalMode, 
+    closeAuthModal, 
+    loginWithPassword, 
+    verifyLoginOtp, 
+    register, 
+    verifyRegisterOtp, 
+    resendOtp
+  } = useAuth();
 
-export const AuthModal: React.FC<AuthModalProps> = ({
-  isOpen,
-  onClose,
-  onLoginSuccess,
-  initialMode = 'login'
-}) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'verify'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'register' | 'verify_login' | 'verify_register'>(authModalMode);
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
   // Form states
+  const [password, setPassword] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [role, setRole] = useState<Role>('student');
   const [verificationCode, setVerificationCode] = useState<string>('');
+  const [maskedEmail, setMaskedEmail] = useState<string>('');
+  const [targetEmail, setTargetEmail] = useState<string>('');
   const [devCode, setDevCode] = useState<string | null>(null);
 
   // UI state
@@ -48,168 +45,210 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [resendCooldown, setResendCooldown] = useState<number>(0);
 
   useEffect(() => {
-    if (isOpen) {
-      setMode(initialMode);
+    if (isAuthModalOpen) {
+      setMode(authModalMode);
       setError(null);
       setSuccessMsg(null);
       setDevCode(null);
+      setVerificationCode('');
+      setPassword('');
+      setEmail('');
     }
-  }, [isOpen, initialMode]);
+  }, [isAuthModalOpen, authModalMode]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     if (resendCooldown > 0) {
       timer = setTimeout(() => setResendCooldown(prev => prev - 1), 1000);
     }
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  if (!isOpen) return null;
 
-  // Handle Demo Fill
-  const handleQuickFill = (demoRole: Role) => {
-    if (demoRole === 'student') {
-      setEmail('mohona@student.com');
-      setPassword('password123');
-    } else {
-      setEmail('axis@tutor.com');
-      setPassword('password123');
-    }
-    setError(null);
-  };
+  if (!isAuthModalOpen) return null;
 
-  // Submit Login
-  const handleLoginSubmit = async (e: React.FormEvent) => {
+  // Step 1: Login with password only
+  async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    if (!email.trim() || !password) {
-      setError('Please fill in both email and password.');
+    if (!password.trim()) {
+      setError('Please enter your account password.');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await api.login({ email: email.trim(), password });
-      if (res.success && res.user) {
-        setSuccessMsg(`Welcome back, ${res.user.name}!`);
-        setTimeout(() => {
-          onLoginSuccess(res.user);
-          onClose();
-        }, 600);
+      setError(null);
+      const res = await loginWithPassword(password.trim(), email.trim() || undefined);
+      if (res.success && res.step === 'verify_otp') {
+        setTargetEmail(res.email);
+        setMaskedEmail(res.maskedEmail || res.email);
+        setDevCode(res.devCode || null);
+        setMode('verify_login');
+        setSuccessMsg(`Verification code sent via Resend to ${res.maskedEmail || res.email}`);
+        setResendCooldown(60);
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err.message || 'Login failed. Please check your password.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Submit Register
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
+  // Step 2: Verify Login OTP
+  async function handleVerifyLoginOtp(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    if (!name.trim() || !email.trim() || !password) {
-      setError('Please fill in all required fields.');
+    if (!verificationCode.trim() || verificationCode.trim().length !== 6) {
+      setError('Please enter the full 6-digit code received in your email.');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await api.register({
+      setError(null);
+      await verifyLoginOtp(targetEmail, verificationCode.trim());
+    } catch (err: any) {
+      setError(err.message || 'Verification code failed. Please check and try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Step 1: Registration with email & password (auto role detection)
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError('Name, email, and password are all required.');
+      return;
+    }
+
+    const rawEmail = email.trim();
+    const isTutor = rawEmail.toLowerCase().endsWith('-tutor');
+    const cleanEmail = isTutor ? rawEmail.replace(/-tutor$/i, '').trim() : rawEmail;
+    const assignedRole: Role = isTutor ? 'tutor' : 'student';
+
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await register({
         name: name.trim(),
-        email: email.trim(),
-        password,
-        role
+        email: cleanEmail,
+        password: password.trim(),
+        role: assignedRole
       });
 
       if (res.success) {
-        setSuccessMsg(res.message);
-        if (res.devCode) {
-          setDevCode(res.devCode);
-        }
+        setTargetEmail(cleanEmail.toLowerCase());
+        setMaskedEmail(cleanEmail.toLowerCase());
+        setDevCode(res.devCode || null);
+        setMode('verify_register');
+        setSuccessMsg(`Verification code sent via Resend to ${cleanEmail} (${assignedRole === 'tutor' ? 'Home Tutor' : 'Student'} account)`);
         setResendCooldown(60);
-        setMode('verify');
       }
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.');
+      setError(err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Submit Verification Code
-  const handleVerifySubmit = async (e: React.FormEvent) => {
+  // Step 2: Verify Registration OTP
+  async function handleVerifyRegisterOtp(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanCode = verificationCode.trim();
-    if (!cleanCode) {
-      setError('Please enter the 6-digit verification code.');
+    if (!verificationCode.trim() || verificationCode.trim().length !== 6) {
+      setError('Please enter the full 6-digit code received in your email.');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await api.verifyEmail({
-        email: email.trim(),
-        code: cleanCode
-      });
-
-      if (res.success && res.user) {
-        setSuccessMsg('Email verified successfully! Welcome to TutorFlow.');
-        setTimeout(() => {
-          onLoginSuccess(res.user);
-          onClose();
-        }, 700);
-      }
+      setError(null);
+      await verifyRegisterOtp(targetEmail, verificationCode.trim());
     } catch (err: any) {
-      setError(err.message || 'Verification failed. Please check the code.');
+      setError(err.message || 'Invalid or expired code.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Resend Verification Code
-  const handleResendCode = async () => {
-    if (resendCooldown > 0 || !email.trim()) return;
-    setError(null);
+  // Resend code trigger
+  async function handleResendCode() {
+    if (resendCooldown > 0 || !targetEmail) return;
     try {
       setLoading(true);
-      const res = await api.resendCode(email.trim());
-      if (res.success) {
-        setSuccessMsg('A new verification code has been dispatched.');
-        if (res.devCode) {
-          setDevCode(res.devCode);
-        }
-        setResendCooldown(60);
+      setError(null);
+      const type = mode === 'verify_login' ? 'login' : 'register';
+      const res = await resendOtp(targetEmail, type);
+      if (res.devCode) {
+        setDevCode(res.devCode);
       }
+      setSuccessMsg(`Fresh verification code sent via Resend to ${targetEmail}`);
+      setResendCooldown(60);
     } catch (err: any) {
-      setError(err.message || 'Failed to resend verification code.');
+      setError(err.message || 'Failed to resend code');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div 
-        className="modal-content" 
-        onClick={e => e.stopPropagation()}
-        style={{ maxWidth: '480px', padding: '1.75rem' }}
-      >
-        {/* Modal Header */}
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(31, 35, 50, 0.45)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000,
+      padding: '1rem',
+      animation: 'fadeIn 0.2s ease-out'
+    }}>
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: '28px',
+        width: '100%',
+        maxWidth: '480px',
+        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.12)',
+        border: '1px solid rgba(220, 224, 238, 0.8)',
+        overflow: 'hidden',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* Close Button */}
+        <button
+          onClick={closeAuthModal}
+          style={{
+            position: 'absolute',
+            top: '1.25rem',
+            right: '1.25rem',
+            background: '#F1F3F8',
+            border: 'none',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            zIndex: 10,
+            transition: 'background 0.2s'
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.background = '#E2E6F0')}
+          onMouseOut={(e) => (e.currentTarget.style.background = '#F1F3F8')}
+          aria-label="Close"
+        >
+          <X size={16} />
+        </button>
+
+        {/* Modal Top Header with Pastel Accent */}
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '1.25rem'
+          background: 'linear-gradient(135deg, #EEF0FD 0%, #FAFBFD 100%)',
+          padding: '2rem 2rem 1.5rem 2rem',
+          borderBottom: '1px solid #ECEFF6'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.6rem' }}>
             <div style={{
               width: '38px',
               height: '38px',
@@ -218,440 +257,345 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               color: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              border: '1px solid var(--pastel-lilac-border)'
             }}>
-              {mode === 'verify' ? <KeyRound size={20} /> : <GraduationCap size={20} />}
+              <KeyRound size={20} />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                {mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create Account' : 'Verify Email'}
+              <h2 style={{
+                fontSize: '1.35rem',
+                fontWeight: 800,
+                color: 'var(--text-main)',
+                margin: 0,
+                letterSpacing: '-0.02em'
+              }}>
+                {mode === 'login' && 'Sign In to TutorFlow'}
+                {mode === 'register' && 'Create Your Account'}
+                {(mode === 'verify_login' || mode === 'verify_register') && 'Email Verification'}
               </h2>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
-                {mode === 'login' 
-                  ? 'Access your lessons, tasks & homework' 
-                  : mode === 'register' 
-                  ? 'Join as Mohona student or home tutor' 
-                  : `Enter 6-digit code sent to ${email}`}
-              </p>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {mode === 'login' && 'Log in with only your password & Resend email OTP'}
+                {mode === 'register' && 'Register with email & password'}
+                {mode === 'verify_login' && 'Enter 6-digit code dispatched via Resend'}
+                {mode === 'verify_register' && 'Verify email to activate your learning timeline'}
+              </span>
             </div>
           </div>
 
-          <button 
-            className="btn-circle btn-secondary"
-            onClick={onClose}
-            style={{ width: '32px', height: '32px', cursor: 'pointer' }}
-          >
-            <X size={16} />
-          </button>
+          {/* Tab Selector (only shown on login/register view) */}
+          {(mode === 'login' || mode === 'register') && (
+            <div style={{
+              display: 'flex',
+              background: '#FFFFFF',
+              borderRadius: '999px',
+              padding: '0.25rem',
+              border: '1px solid #E2E6F0',
+              marginTop: '1rem'
+            }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setError(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.55rem',
+                  borderRadius: '999px',
+                  border: 'none',
+                  background: mode === 'login' ? 'var(--primary)' : 'transparent',
+                  color: mode === 'login' ? '#FFFFFF' : 'var(--text-muted)',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Log In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('register');
+                  setError(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.55rem',
+                  borderRadius: '999px',
+                  border: 'none',
+                  background: mode === 'register' ? 'var(--primary)' : 'transparent',
+                  color: mode === 'register' ? '#FFFFFF' : 'var(--text-muted)',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Registration
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Tab Switcher (Login vs Sign Up) - Only visible when not in verify step */}
-        {mode !== 'verify' && (
-          <div style={{
-            display: 'flex',
-            background: '#EDEFF6',
-            borderRadius: '999px',
-            padding: '0.25rem',
-            marginBottom: '1.25rem'
-          }}>
-            <button
-              type="button"
-              onClick={() => { setMode('login'); setError(null); }}
-              style={{
-                flex: 1,
-                padding: '0.45rem',
-                borderRadius: '999px',
-                border: 'none',
-                background: mode === 'login' ? '#FFFFFF' : 'transparent',
-                color: mode === 'login' ? 'var(--primary)' : 'var(--text-muted)',
-                fontWeight: 700,
-                fontSize: '0.825rem',
-                cursor: 'pointer',
-                boxShadow: mode === 'login' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.2s'
-              }}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode('register'); setError(null); }}
-              style={{
-                flex: 1,
-                padding: '0.45rem',
-                borderRadius: '999px',
-                border: 'none',
-                background: mode === 'register' ? '#FFFFFF' : 'transparent',
-                color: mode === 'register' ? 'var(--primary)' : 'var(--text-muted)',
-                fontWeight: 700,
-                fontSize: '0.825rem',
-                cursor: 'pointer',
-                boxShadow: mode === 'register' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.2s'
-              }}
-            >
-              Create Account
-            </button>
-          </div>
-        )}
-
-        {/* Alert Messages */}
-        {error && (
-          <div style={{
-            background: 'var(--pastel-pink)',
-            border: '1px solid var(--pastel-pink-border)',
-            borderRadius: '12px',
-            padding: '0.65rem 0.9rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            color: 'var(--pastel-pink-text)',
-            fontSize: '0.8rem',
-            fontWeight: 600
-          }}>
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {successMsg && (
-          <div style={{
-            background: 'var(--pastel-mint)',
-            border: '1px solid var(--pastel-mint-border)',
-            borderRadius: '12px',
-            padding: '0.65rem 0.9rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            color: 'var(--pastel-mint-text)',
-            fontSize: '0.8rem',
-            fontWeight: 600
-          }}>
-            <CheckCircle2 size={16} />
-            <span>{successMsg}</span>
-          </div>
-        )}
-
-        {/* ----------------- 1. LOGIN MODE ----------------- */}
-        {mode === 'login' && (
-          <form onSubmit={handleLoginSubmit}>
-            {/* Quick Demo Logins */}
+        {/* Modal Body */}
+        <div style={{ padding: '1.75rem 2rem 2rem 2rem' }}>
+          {/* Error Banner */}
+          {error && (
             <div style={{
-              background: '#F8F9FD',
-              borderRadius: '14px',
-              padding: '0.75rem',
-              marginBottom: '1.1rem',
-              border: '1px solid #ECEFF6'
+              background: 'var(--pastel-pink)',
+              border: '1px solid var(--pastel-pink-border)',
+              borderRadius: '12px',
+              padding: '0.75rem 1rem',
+              color: 'var(--pastel-pink-text)',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '1.25rem'
             }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <Sparkles size={12} color="var(--primary)" />
-                <span>Instant Quick-Fill Demo Accounts:</span>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('student')}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid var(--pastel-lilac-border)',
-                    color: 'var(--primary)',
-                    borderRadius: '999px',
-                    padding: '0.3rem 0.65rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.3rem'
-                  }}
-                >
-                  <Sparkles size={11} />
-                  Mohona (Student)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('tutor')}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid var(--pastel-mint-border)',
-                    color: 'var(--pastel-mint-text)',
-                    borderRadius: '999px',
-                    padding: '0.3rem 0.65rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.3rem'
-                  }}
-                >
-                  <GraduationCap size={12} />
-                  Tutor Axis (Tutor)
-                </button>
-              </div>
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
             </div>
+          )}
 
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Email Address</label>
-              <div style={{ position: 'relative' }}>
-                <Mail size={16} color="var(--text-dim)" style={{ position: 'absolute', left: '14px', top: '12px' }} />
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="e.g. mohona@student.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  style={{ paddingLeft: '2.5rem' }}
-                  required
-                />
-              </div>
+          {/* Success Banner */}
+          {successMsg && (
+            <div style={{
+              background: 'var(--pastel-mint)',
+              border: '1px solid var(--pastel-mint-border)',
+              borderRadius: '12px',
+              padding: '0.75rem 1rem',
+              color: 'var(--pastel-mint-text)',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '1.25rem'
+            }}>
+              <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+              <span>{successMsg}</span>
             </div>
+          )}
 
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <Lock size={16} color="var(--text-dim)" style={{ position: 'absolute', left: '14px', top: '12px' }} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="form-input"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '10px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-dim)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+          {/* VIEW 1: Login with Password ONLY */}
+          {mode === 'login' && (
+            <form onSubmit={handlePasswordLogin}>
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Account Password *</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
+                    Password-Only Login
+                  </span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Enter your password..."
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    style={{ paddingRight: '2.5rem' }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-dim)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
+                  💡 Enter your account password. TutorFlow will match your account and send a 6-digit verification code to your email.
+                </p>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-              style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}
-            >
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <RefreshCw size={15} className="animate-spin" />
-                  Authenticating...
-                </span>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span>Sign In</span>
-                  <ArrowRight size={15} />
-                </span>
-              )}
-            </button>
-          </form>
-        )}
 
-        {/* ----------------- 2. REGISTER MODE ----------------- */}
-        {mode === 'register' && (
-          <form onSubmit={handleRegisterSubmit}>
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Full Name *</label>
-              <div style={{ position: 'relative' }}>
-                <UserIcon size={16} color="var(--text-dim)" style={{ position: 'absolute', left: '14px', top: '12px' }} />
+
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ width: '100%', borderRadius: '999px', padding: '0.75rem', fontSize: '0.9rem' }}
+                disabled={loading}
+              >
+                {loading ? 'Verifying Password...' : (
+                  <>
+                    <span>Continue with Password</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* VIEW 2: Registration with Email & Password */}
+          {mode === 'register' && (
+            <form onSubmit={handleRegister}>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Mohona or Tutor Axis"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Email Address *</label>
                 <input
                   type="text"
+                  inputMode="email"
                   className="form-input"
-                  placeholder="e.g. Mohona or Axis"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  style={{ paddingLeft: '2.5rem' }}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Email Address *</label>
-              <div style={{ position: 'relative' }}>
-                <Mail size={16} color="var(--text-dim)" style={{ position: 'absolute', left: '14px', top: '12px' }} />
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="name@example.com"
+                  placeholder="e.g. name@example.com (or name@example.com-tutor)"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  style={{ paddingLeft: '2.5rem' }}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
+                <p style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginTop: '0.35rem' }}>
+                  💡 Student account created by default. For a tutor account, append <strong>-tutor</strong> to your email (e.g. <em>abc@gmail.com-tutor</em>).
+                </p>
               </div>
-            </div>
 
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Password *</label>
-              <div style={{ position: 'relative' }}>
-                <Lock size={16} color="var(--text-dim)" style={{ position: 'absolute', left: '14px', top: '12px' }} />
+              <div className="form-group">
+                <label className="form-label">Account Password *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Create a strong password..."
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    style={{ paddingRight: '2.5rem' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-dim)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ width: '100%', borderRadius: '999px', padding: '0.75rem', fontSize: '0.9rem' }}
+                disabled={loading}
+              >
+                {loading ? 'Creating Account...' : (
+                  <>
+                    <span>Create Account & Send Code</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* VIEW 3: OTP Verification Screen (For Login or Register) */}
+          {(mode === 'verify_login' || mode === 'verify_register') && (
+            <form onSubmit={mode === 'verify_login' ? handleVerifyLoginOtp : handleVerifyRegisterOtp}>
+              <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'var(--pastel-lilac)',
+                  color: 'var(--primary)',
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: '999px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  marginBottom: '0.75rem'
+                }}>
+                  <Mail size={14} />
+                  <span>Sent via Resend to {maskedEmail}</span>
+                </div>
+
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.2rem 0' }}>
+                  Enter the 6-digit numeric verification code to authenticate your session:
+                </p>
+              </div>
+
+              {/* 6-Digit Code Input */}
+              <div className="form-group">
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="form-input"
-                  placeholder="Create a password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
-                  required
+                  type="text"
+                  maxLength={6}
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="0 0 0 0 0 0"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    textAlign: 'center',
+                    fontSize: '1.85rem',
+                    fontWeight: 800,
+                    letterSpacing: '12px',
+                    fontFamily: 'monospace',
+                    padding: '0.75rem',
+                    borderRadius: '16px',
+                    border: '2px solid var(--primary)',
+                    background: '#FAFBFD',
+                    color: 'var(--text-main)',
+                    boxShadow: '0 4px 12px rgba(111, 101, 241, 0.08)'
+                  }}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '10px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-dim)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
               </div>
-            </div>
 
-            {/* Select Role */}
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Select Role *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div
-                  onClick={() => setRole('student')}
-                  style={{
-                    padding: '0.75rem',
-                    borderRadius: '16px',
-                    border: `1.5px solid ${role === 'student' ? 'var(--primary)' : 'rgba(220, 224, 238, 0.8)'}`,
-                    background: role === 'student' ? 'var(--pastel-lilac)' : '#FFFFFF',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    textAlign: 'center'
-                  }}
-                >
-                  <Sparkles size={20} color={role === 'student' ? 'var(--primary)' : 'var(--text-muted)'} style={{ marginBottom: '0.25rem' }} />
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: role === 'student' ? 'var(--primary)' : 'var(--text-main)' }}>
-                    Student
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    Track tasks & homework
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setRole('tutor')}
-                  style={{
-                    padding: '0.75rem',
-                    borderRadius: '16px',
-                    border: `1.5px solid ${role === 'tutor' ? 'var(--pastel-mint-text)' : 'rgba(220, 224, 238, 0.8)'}`,
-                    background: role === 'tutor' ? 'var(--pastel-mint)' : '#FFFFFF',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    textAlign: 'center'
-                  }}
-                >
-                  <GraduationCap size={20} color={role === 'tutor' ? 'var(--pastel-mint-text)' : 'var(--text-muted)'} style={{ marginBottom: '0.25rem' }} />
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: role === 'tutor' ? 'var(--pastel-mint-text)' : 'var(--text-main)' }}>
-                    Tutor Hub
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    Review & guide questions
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-              style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}
-            >
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <RefreshCw size={15} className="animate-spin" />
-                  Sending Verification Code...
-                </span>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span>Register & Send Code</span>
-                  <ArrowRight size={15} />
-                </span>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* ----------------- 3. VERIFY EMAIL OTP MODE ----------------- */}
-        {mode === 'verify' && (
-          <form onSubmit={handleVerifySubmit}>
-            <div style={{
-              background: '#F8F9FD',
-              borderRadius: '16px',
-              padding: '1rem',
-              marginBottom: '1.25rem',
-              textAlign: 'center',
-              border: '1px solid #ECEFF6'
-            }}>
-              <div style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '50%',
-                background: 'var(--pastel-lilac)',
-                color: 'var(--primary)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '0.5rem'
-              }}>
-                <Mail size={22} />
-              </div>
-              <p style={{ fontSize: '0.825rem', color: 'var(--text-main)', margin: '0 0 0.35rem', fontWeight: 600 }}>
-                Verification code dispatched via Nodemailer
-              </p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                Please check your inbox at <strong>{email}</strong>
-              </p>
-
-              {/* Dev helper code preview banner */}
+              {/* Dev Preview Autofill pill */}
               {devCode && (
                 <div style={{
-                  marginTop: '0.85rem',
-                  padding: '0.5rem 0.75rem',
-                  background: 'var(--pastel-amber)',
-                  border: '1px solid var(--pastel-amber-border)',
+                  background: '#F1F3F8',
                   borderRadius: '12px',
+                  padding: '0.65rem 0.85rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '0.5rem'
+                  marginBottom: '1rem',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-dim)'
                 }}>
-                  <div style={{ fontSize: '0.74rem', color: 'var(--pastel-amber-text)', textAlign: 'left' }}>
-                    <span style={{ fontWeight: 700 }}>Dev Code: </span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', letterSpacing: '2px' }}>{devCode}</span>
-                  </div>
+                  <span>Dev OTP preview: <strong style={{ color: 'var(--primary)', letterSpacing: '2px' }}>{devCode}</strong></span>
                   <button
                     type="button"
                     onClick={() => setVerificationCode(devCode)}
                     style={{
-                      background: '#FFFFFF',
-                      border: '1px solid var(--pastel-amber-border)',
-                      color: 'var(--pastel-amber-text)',
-                      borderRadius: '999px',
+                      background: 'var(--primary)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
                       padding: '0.2rem 0.55rem',
                       fontSize: '0.7rem',
                       fontWeight: 700,
@@ -662,87 +606,70 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                 </div>
               )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem', textAlign: 'center', display: 'block' }}>
-                Enter 6-Digit Verification Code
-              </label>
-              <input
-                type="text"
-                maxLength={6}
-                className="form-input"
-                placeholder="• • • • • •"
-                value={verificationCode}
-                onChange={e => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                style={{
-                  textAlign: 'center',
-                  fontSize: '1.5rem',
-                  fontWeight: 800,
-                  letterSpacing: '8px',
-                  fontFamily: 'monospace',
-                  padding: '0.65rem'
-                }}
-                autoFocus
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-              style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}
-            >
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <RefreshCw size={15} className="animate-spin" />
-                  Verifying...
-                </span>
-              ) : (
-                <span>Activate Account</span>
-              )}
-            </button>
-
-            {/* Resend and Back Buttons */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: '1.25rem',
-              fontSize: '0.78rem'
-            }}>
-              <button
-                type="button"
-                onClick={() => setMode('register')}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontWeight: 600
-                }}
-              >
-                ← Back to edit
-              </button>
 
               <button
-                type="button"
-                onClick={handleResendCode}
-                disabled={resendCooldown > 0 || loading}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: resendCooldown > 0 ? 'var(--text-dim)' : 'var(--primary)',
-                  cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
-                  fontWeight: 700
-                }}
+                type="submit"
+                className="btn btn-primary"
+                style={{ width: '100%', borderRadius: '999px', padding: '0.75rem', fontSize: '0.9rem' }}
+                disabled={loading || verificationCode.length !== 6}
               >
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                {loading ? 'Authenticating with JWT...' : (
+                  <>
+                    <ShieldCheck size={18} />
+                    <span>Verify & Access Dashboard</span>
+                  </>
+                )}
               </button>
-            </div>
-          </form>
-        )}
+
+              {/* Resend Code Section */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: '1.25rem',
+                paddingTop: '1rem',
+                borderTop: '1px solid #ECEFF6',
+                fontSize: '0.8rem'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setMode(mode === 'verify_login' ? 'login' : 'register')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  ← Back
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0 || loading}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: resendCooldown > 0 ? 'var(--text-dim)' : 'var(--primary)',
+                    fontWeight: 700,
+                    cursor: resendCooldown > 0 ? 'default' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                  <span>
+                    {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code via Resend'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

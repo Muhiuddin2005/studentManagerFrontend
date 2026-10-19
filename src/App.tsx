@@ -1,25 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
-import MetricStats from './components/MetricStats';
 import StatusFilter from './components/StatusFilter';
+
 import StudentDashboard from './components/StudentDashboard';
 import TutorDashboard from './components/TutorDashboard';
 import AttachmentModal from './components/AttachmentModal';
 import BottomNav from './components/BottomNav';
 import Modal from './components/Modal';
 import AuthModal from './components/AuthModal';
+import WeeklyRoutine from './components/WeeklyRoutine';
+import Toast from './components/Toast';
+import LogoutConfirmModal from './components/LogoutConfirmModal';
+import { useAuth } from './context/AuthContext';
 import { StatusBadge, SubjectBadge } from './components/Badge';
 import * as api from './services/api';
 import { 
   Task, 
-  Role, 
   TaskStatus, 
   Priority, 
   NewTaskInput, 
   AttachmentSubmitData, 
-  ServerStatus,
-  User 
+  ServerStatus 
 } from './types';
+
 import { 
   Plus, 
   Clock, 
@@ -30,23 +33,14 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('tutorflow_user');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
-      id: 'user-student-1',
-      name: 'Mohona',
-      email: 'mohona@student.com',
-      role: 'student' as Role,
-      is_verified: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-  });
+  const { 
+    user: currentUser, 
+    role, 
+    toast, 
+    hideToast, 
+    switchRoleDirectly 
+  } = useAuth();
 
-  const [role, setRole] = useState<Role>(() => currentUser?.role || 'student');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,31 +52,10 @@ export default function App() {
   // Modals state
   const [isNewTaskOpen, setIsNewTaskOpen] = useState<boolean>(false);
   const [isAttachOpen, setIsAttachOpen] = useState<boolean>(false);
-  const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [targetTaskForAttach, setTargetTaskForAttach] = useState<Task | null>(null);
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Sync role if currentUser changes
-  const handleToggleRole = (newRole: Role) => {
-    setRole(newRole);
-    if (currentUser) {
-      const updated: User = {
-        ...currentUser,
-        role: newRole,
-        name: newRole === 'student' ? 'Mohona' : 'Tutor Axis',
-        email: newRole === 'student' ? 'mohona@student.com' : 'axis@tutor.com'
-      };
-      setCurrentUser(updated);
-      localStorage.setItem('tutorflow_user', JSON.stringify(updated));
-    }
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('tutorflow_user');
-  };
 
   // New task form state
   const [newTaskForm, setNewTaskForm] = useState<NewTaskInput>({
@@ -241,35 +214,36 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Top Navigation */}
+      {/* Top Navigation with Log In / Log Out Toggle */}
       <Navbar
-        currentRole={role}
-        onToggleRole={handleToggleRole}
         onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
         serverStatus={serverStatus}
-        currentUser={currentUser}
-        onOpenAuthModal={(mode) => {
-          setAuthModalMode(mode || 'login');
-          setIsAuthOpen(true);
-        }}
-        onLogout={handleLogout}
       />
+
 
       <main className="main-content">
         {/* Mockup-Style Goal Banner (Inspired by "🚩 Set your weekly goal! →" in reference) */}
-        <div style={{
-          background: '#FFFFFF',
-          borderRadius: '999px',
-          border: '1px solid rgba(220, 224, 238, 0.8)',
-          padding: '0.65rem 1.25rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '1.5rem',
-          boxShadow: 'var(--shadow-sm)',
-          cursor: 'pointer'
-        }}
-        onClick={() => setIsNewTaskOpen(true)}
+        <div 
+          className="goal-banner"
+          style={{
+            background: '#FFFFFF',
+            borderRadius: '999px',
+            border: '1px solid rgba(220, 224, 238, 0.8)',
+            padding: '0.65rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '1.5rem',
+            boxShadow: 'var(--shadow-sm)',
+            cursor: 'pointer'
+          }}
+          onClick={() => {
+            if (role === 'tutor') {
+              setIsNewTaskOpen(true);
+            } else {
+              document.getElementById('weekly-routine-section')?.scrollIntoView({ behavior: 'smooth' });
+            }
+          }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <div style={{
@@ -285,12 +259,12 @@ export default function App() {
               <Flag size={14} />
             </div>
             <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              {role === 'student' ? 'Weekly Target: Complete 4 homework tasks' : 'Tutor Goal: Review pending student questions'}
+              {role === 'student' ? 'Weekly Target: Follow 7-day study timetable' : 'Tutor Goal: Review pending student questions & assign lessons'}
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 700 }}>
-            <span className="hide-on-mobile">Set Goal</span>
+            <span className="hide-on-mobile">{role === 'tutor' ? 'Assign Task' : 'View Timetable'}</span>
             <ArrowRight size={15} />
           </div>
         </div>
@@ -305,10 +279,10 @@ export default function App() {
           gap: '0.5rem'
         }}>
           <div>
-            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.03em' }}>
+            <h2 className="hero-title" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.03em' }}>
               {role === 'student' ? 'Start Your Journey 📖' : 'Lesson Schedule & Courses 🎓'}
             </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
+            <p className="hero-subtitle" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
               {role === 'student' 
                 ? 'Manage your daily learning timeline and attach problem screenshots'
                 : 'Address student questions, review homework proofs, and verify progress'}
@@ -316,14 +290,15 @@ export default function App() {
           </div>
         </div>
 
-        {/* Metric Statistics Cards (Horizontal scroll on mobile) */}
-        <MetricStats
-          tasks={tasks}
-          activeFilter={activeFilter}
-          onSelectFilter={setActiveFilter}
+        {/* 7-Day Study Routine Schedule (Student can create, only tutor can delete) */}
+        <WeeklyRoutine
+          currentRole={role}
+          currentUser={currentUser}
         />
 
+
         {/* Status Filter Tabs (Horizontal scroll on mobile) */}
+
         <StatusFilter
           currentFilter={activeFilter}
           onFilterChange={setActiveFilter}
@@ -365,7 +340,6 @@ export default function App() {
             }}
             onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
             onOpenPreviewImage={(url) => setPreviewImage(url)}
-            onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
           />
         ) : (
           <TutorDashboard
@@ -383,13 +357,20 @@ export default function App() {
         currentTab={mobileTab}
         onSelectTab={(tab) => {
           setMobileTab(tab);
-          if (tab === 'home') setActiveFilter('all');
-          if (tab === 'timeline') setActiveFilter('ongoing');
+          if (tab === 'home') {
+            setActiveFilter('all');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          if (tab === 'timeline') {
+            document.getElementById('weekly-routine-section')?.scrollIntoView({ behavior: 'smooth' });
+          }
         }}
         currentRole={role}
-        onToggleRole={setRole}
+        onToggleRole={(newRole) => switchRoleDirectly(newRole)}
         onOpenNewTask={() => setIsNewTaskOpen(true)}
       />
+
+
 
       {/* MODAL 1: Create New Study Task */}
       <Modal
@@ -653,18 +634,15 @@ export default function App() {
         )}
       </Modal>
 
-      {/* MODAL 5: User Authentication & Email Verification */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        initialMode={authModalMode}
-        onLoginSuccess={(user) => {
-          setCurrentUser(user);
-          setRole(user.role);
-          localStorage.setItem('tutorflow_user', JSON.stringify(user));
-          loadTasks();
-        }}
-      />
+      {/* Authentication Modal (Password-Only Login & Resend OTP Registration) */}
+      <AuthModal />
+
+      {/* Sign Out Confirmation Modal */}
+      <LogoutConfirmModal />
+
+      {/* Floating Confirmation & Status Toast */}
+      <Toast toast={toast} onClose={hideToast} />
     </div>
   );
 }
+

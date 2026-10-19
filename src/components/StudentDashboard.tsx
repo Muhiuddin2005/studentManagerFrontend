@@ -2,13 +2,13 @@ import React from 'react';
 import { StatusBadge, SubjectBadge, PriorityBadge } from './Badge';
 import TimelineStepper from './TimelineStepper';
 import { Task, TaskStatus } from '../types';
+import { resolveAttachmentUrl } from '../services/api';
 import { 
   Paperclip, 
   Image as ImageIcon, 
   ArrowUpRight, 
   Check, 
-  History, 
-  Plus, 
+  History,
   Calendar,
   AlertCircle 
 } from 'lucide-react';
@@ -19,7 +19,6 @@ interface StudentDashboardProps {
   onOpenAttachModal: (task: Task) => void;
   onOpenDetailsModal: (task: Task) => void;
   onOpenPreviewImage: (url: string) => void;
-  onOpenNewTaskModal: () => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -27,8 +26,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onStatusChange,
   onOpenAttachModal,
   onOpenDetailsModal,
-  onOpenPreviewImage,
-  onOpenNewTaskModal
+  onOpenPreviewImage
 }) => {
   if (tasks.length === 0) {
     return (
@@ -47,15 +45,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <AlertCircle size={28} />
         </div>
         <h3 style={{ fontSize: '1.25rem', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-          No study tasks found
+          No study tasks assigned
         </h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-          Initialize your homework, syllabus topic, or exercises to begin tracking your study timeline!
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 auto', maxWidth: '420px' }}>
+          No homework or study tasks currently assigned. Your tutor (Tutor Axis) will assign new lessons and exercises here!
         </p>
-        <button className="btn btn-primary" onClick={onOpenNewTaskModal}>
-          <Plus size={16} />
-          <span>Add Study Task</span>
-        </button>
       </div>
     );
   }
@@ -143,6 +137,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <TimelineStepper
                 currentStatus={task.status}
                 onStatusChange={(newStatus) => onStatusChange(task, newStatus)}
+                userRole="student"
               />
             </div>
 
@@ -184,9 +179,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 {screenshots.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                     {screenshots.map((s) => {
-                      const imageSrc = s.file_url?.startsWith('/uploads')
-                        ? `http://localhost:5000${s.file_url}`
-                        : (s.file_url || '');
+                      const imageSrc = resolveAttachmentUrl(s.file_url);
 
                       return (
                         <div
@@ -201,7 +194,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             border: '1px solid rgba(0, 0, 0, 0.08)',
                             cursor: 'pointer',
                             boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
-                            transition: 'transform 0.2s'
+                            transition: 'transform 0.2s',
+                            background: '#F1F3F8'
                           }}
                           onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.03)')}
                           onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
@@ -211,7 +205,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             src={imageSrc}
                             alt={s.file_name || 'Problem screenshot'}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.onerror = null;
+                              target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='125' height='85' viewBox='0 0 125 85'%3E%3Crect width='100%25' height='100%25' fill='%23EEF0FD'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='10' font-weight='bold' fill='%236F65F1'%3E%F0%9F%93%B7 View Problem%3C/text%3E%3C/svg%3E";
+                            }}
                           />
+
                           <div style={{
                             position: 'absolute',
                             inset: 0,
@@ -263,17 +263,39 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   onClick={() => onOpenAttachModal(task)}
                 >
                   <ImageIcon size={14} />
-                  <span>Attach Question / Problem Screenshot</span>
+                  <span>Attach Question / Screenshot</span>
                 </button>
 
-                {task.status !== 'done' && (
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => onStatusChange(task, 'done', 'Marked completed by student')}
-                  >
-                    <Check size={14} color="var(--pastel-mint-text)" />
-                    <span>Mark Done</span>
-                  </button>
+                {task.status === 'done' ? (
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: 'var(--pastel-mint-text)',
+                    background: 'var(--pastel-mint)',
+                    padding: '0.3rem 0.75rem',
+                    borderRadius: '999px',
+                    border: '1px solid var(--pastel-mint-border)'
+                  }}>
+                    <Check size={13} />
+                    <span>Verified & Done by Tutor</span>
+                  </span>
+                ) : (
+                  <span style={{ 
+                    fontSize: '0.735rem', 
+                    color: 'var(--text-muted)', 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    background: '#F8F9FD',
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '8px',
+                    border: '1px solid #ECEFF6'
+                  }}>
+                    <span>⏳ Awaiting tutor verification</span>
+                  </span>
                 )}
               </div>
 

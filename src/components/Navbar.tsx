@@ -1,44 +1,33 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   GraduationCap, 
-  Sparkles, 
-  UserCheck, 
   Plus, 
-  Bell, 
   Search, 
-  Database,
-  LogIn,
-  LogOut,
-  User as UserIcon,
-  ChevronDown
+  LogIn, 
+  LogOut 
 } from 'lucide-react';
-import { Role, ServerStatus, User } from '../types';
+import { ServerStatus } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface NavbarProps {
-  currentRole: Role;
-  onToggleRole: (role: Role) => void;
   onOpenNewTaskModal: () => void;
-  serverStatus: ServerStatus | null;
+  serverStatus?: ServerStatus | null;
   onSearchClick?: () => void;
-  currentUser?: User | null;
-  onOpenAuthModal?: (mode?: 'login' | 'register') => void;
-  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ 
-  currentRole, 
-  onToggleRole, 
   onOpenNewTaskModal, 
-  serverStatus,
-  onSearchClick,
-  currentUser,
-  onOpenAuthModal,
-  onLogout
+  onSearchClick
 }) => {
-  const isStudent = currentRole === 'student';
-  const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false);
+  const { 
+    user, 
+    role, 
+    isAuthenticated, 
+    requestLogout, 
+    openAuthModal 
+  } = useAuth();
 
-  const initialLetter = currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : (isStudent ? 'M' : 'A');
+  const isStudent = role === 'student';
 
   return (
     <header style={{
@@ -89,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 color: isStudent ? 'var(--primary)' : 'var(--pastel-mint-text)',
                 border: `1px solid ${isStudent ? 'var(--pastel-lilac-border)' : 'var(--pastel-mint-border)'}`
               }}>
-                {isStudent ? 'Student' : 'Tutor Hub'}
+                {isStudent ? 'Student View' : 'Tutor Hub'}
               </span>
             </div>
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }} className="hide-on-mobile">
@@ -98,240 +87,80 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Center/Right: Role Switcher & User Profile */}
+        {/* Center/Right: Log In / Log Out Toggle & User Account Area */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '0.6rem',
           flexWrap: 'wrap'
         }}>
-          {/* Role Pill Switcher */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: '#EDEFF6',
-            padding: '0.25rem',
-            borderRadius: '999px',
-            border: '1px solid rgba(220, 224, 238, 0.7)'
-          }}>
-            <button
-              onClick={() => onToggleRole('student')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.38rem 0.85rem',
-                borderRadius: '999px',
-                border: 'none',
-                background: isStudent ? 'var(--primary)' : 'transparent',
-                color: isStudent ? '#FFFFFF' : 'var(--text-muted)',
-                fontWeight: 700,
-                fontSize: '0.785rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: isStudent ? '0 2px 8px rgba(111, 101, 241, 0.35)' : 'none'
-              }}
-            >
-              <Sparkles size={13} />
-              <span>Mohona</span>
-            </button>
-            <button
-              onClick={() => onToggleRole('tutor')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.38rem 0.85rem',
-                borderRadius: '999px',
-                border: 'none',
-                background: !isStudent ? 'var(--primary)' : 'transparent',
-                color: !isStudent ? '#FFFFFF' : 'var(--text-muted)',
-                fontWeight: 700,
-                fontSize: '0.785rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: !isStudent ? '0 2px 8px rgba(111, 101, 241, 0.35)' : 'none'
-              }}
-            >
-              <UserCheck size={13} />
-              <span>Tutor Axis</span>
-            </button>
-          </div>
-
-          {/* User Account / Profile Section */}
-          {currentUser ? (
-            <div style={{ position: 'relative' }}>
+          {/* Authenticated State: User Avatar & Log Out Toggle */}
+          {isAuthenticated && user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {/* Prominent Log Out Toggle Button with confirmation toast trigger */}
               <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                onClick={requestLogout}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.45rem',
-                  padding: '0.3rem 0.65rem 0.3rem 0.35rem',
+                  gap: '0.35rem',
+                  padding: '0.38rem 0.85rem',
                   borderRadius: '999px',
-                  background: '#FFFFFF',
-                  border: '1px solid #E2E6F0',
+                  border: '1.5px solid var(--pastel-pink-border)',
+                  background: 'var(--pastel-pink)',
+                  color: 'var(--pastel-pink-text)',
+                  fontWeight: 700,
+                  fontSize: '0.785rem',
                   cursor: 'pointer',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  boxShadow: '0 2px 6px rgba(229, 59, 110, 0.08)'
                 }}
+                onMouseOver={(e) => (e.currentTarget.style.background = '#FCE2EC')}
+                onMouseOut={(e) => (e.currentTarget.style.background = 'var(--pastel-pink)')}
+                title="Log Out of TutorFlow"
               >
-                <div style={{
-                  width: '26px',
-                  height: '26px',
-                  borderRadius: '50%',
-                  background: isStudent ? 'var(--pastel-lilac)' : 'var(--pastel-mint)',
-                  color: isStudent ? 'var(--primary)' : 'var(--pastel-mint-text)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem',
-                  fontWeight: 800
-                }}>
-                  {initialLetter}
-                </div>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }} className="hide-on-mobile">
-                  {currentUser.name}
-                </span>
-                <ChevronDown size={13} color="var(--text-dim)" />
+                <LogOut size={13} />
+                <span>Log Out</span>
               </button>
-
-              {/* Profile Dropdown Menu */}
-              {showProfileMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: '110%',
-                  right: 0,
-                  width: '210px',
-                  background: '#FFFFFF',
-                  borderRadius: '16px',
-                  boxShadow: 'var(--shadow-float)',
-                  border: '1px solid rgba(220, 224, 238, 0.9)',
-                  padding: '0.65rem',
-                  zIndex: 200,
-                  animation: 'slideUp 0.15s ease'
-                }}>
-                  <div style={{ padding: '0.4rem 0.5rem 0.6rem', borderBottom: '1px solid #F0F2F7' }}>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                      {currentUser.name}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
-                      {currentUser.email}
-                    </div>
-                    <div style={{ marginTop: '0.35rem' }}>
-                      <span style={{
-                        fontSize: '0.65rem',
-                        fontWeight: 700,
-                        padding: '0.1rem 0.45rem',
-                        borderRadius: '999px',
-                        background: currentUser.role === 'student' ? 'var(--pastel-lilac)' : 'var(--pastel-mint)',
-                        color: currentUser.role === 'student' ? 'var(--primary)' : 'var(--pastel-mint-text)'
-                      }}>
-                        {currentUser.role === 'student' ? 'Student Account' : 'Home Tutor'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '0.35rem 0 0' }}>
-                    <button
-                      onClick={() => {
-                        setShowProfileMenu(false);
-                        onOpenAuthModal?.('login');
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.4rem 0.5rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.45rem',
-                        border: 'none',
-                        background: 'transparent',
-                        borderRadius: '8px',
-                        fontSize: '0.78rem',
-                        color: 'var(--text-main)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#F8F9FD')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <UserIcon size={14} color="var(--primary)" />
-                      <span>Switch Account</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setShowProfileMenu(false);
-                        onLogout?.();
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.4rem 0.5rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.45rem',
-                        border: 'none',
-                        background: 'transparent',
-                        borderRadius: '8px',
-                        fontSize: '0.78rem',
-                        color: 'var(--pastel-pink-text)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--pastel-pink)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <LogOut size={14} color="var(--pastel-pink-text)" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => onOpenAuthModal?.('login')}
-              style={{ padding: '0.38rem 0.85rem' }}
-            >
-              <LogIn size={14} color="var(--primary)" />
-              <span>Sign In</span>
-            </button>
+            /* Unauthenticated State: Log In Toggle & Register */
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => openAuthModal('login')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.42rem 0.95rem',
+                  borderRadius: '999px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700
+                }}
+              >
+                <LogIn size={14} />
+                <span>Log In</span>
+              </button>
+              <button
+                className="btn btn-secondary hide-on-mobile"
+                onClick={() => openAuthModal('register')}
+                style={{
+                  padding: '0.42rem 0.9rem',
+                  borderRadius: '999px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700
+                }}
+              >
+                <span>Register</span>
+              </button>
+            </div>
           )}
 
-          {/* Database / Supabase indicator (desktop) */}
-          <div 
-            className="hide-on-mobile"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              padding: '0.35rem 0.7rem',
-              borderRadius: '999px',
-              background: '#FFFFFF',
-              border: '1px solid #E2E6F0',
-              color: 'var(--text-muted)'
-            }}
-            title={serverStatus?.supabaseConnected ? 'Supabase Live Connected' : 'Local Persistence Engine Active'}
-          >
-            <span style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              backgroundColor: serverStatus?.status === 'ok' ? '#10B981' : '#F43F5E',
-            }} />
-            <Database size={12} />
-            <span>{serverStatus?.supabaseConnected ? 'Supabase Live' : 'Backend Ready'}</span>
-          </div>
-
-          {/* Circular Utility Action Buttons */}
+          {/* Circular Search Utility Action Button */}
           {onSearchClick && (
             <button 
-              className="btn-secondary btn-circle"
+              className="btn-secondary btn-circle hide-on-mobile"
               onClick={onSearchClick}
               title="Search topics"
               style={{ width: '38px', height: '38px' }}
@@ -340,33 +169,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          <div 
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '50%',
-              background: '#FFFFFF',
-              border: '1px solid #E2E6F0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-muted)',
-              cursor: 'pointer'
-            }}
-            title="Notifications"
-          >
-            <Bell size={16} />
-          </div>
-
-          {/* New Task Pill Button */}
-          <button 
-            className="btn btn-primary btn-sm"
-            onClick={onOpenNewTaskModal}
-            style={{ padding: '0.45rem 1rem' }}
-          >
-            <Plus size={15} />
-            <span className="hide-on-mobile">New Task</span>
-          </button>
+          {/* New Task Pill Button (Tutor Only) */}
+          {isAuthenticated && role === 'tutor' && (
+            <button 
+              className="btn btn-primary btn-sm hide-on-mobile"
+              onClick={onOpenNewTaskModal}
+              style={{ padding: '0.45rem 1rem' }}
+            >
+              <Plus size={15} />
+              <span>New Task</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

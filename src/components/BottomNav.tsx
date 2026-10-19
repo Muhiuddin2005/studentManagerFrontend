@@ -39,19 +39,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <Calendar size={19} />
       </button>
 
-      {/* Quick Add Task */}
-      <button
-        className="nav-pill-btn"
-        onClick={onOpenNewTask}
-        title="Create Task"
-        aria-label="Create Task"
-        style={{
-          background: 'rgba(255, 255, 255, 0.12)',
-          color: '#FFFFFF'
-        }}
-      >
-        <PlusCircle size={20} />
-      </button>
+      {/* Quick Add Task (Tutor Only) */}
+      {currentRole === 'tutor' && (
+        <button
+          className="nav-pill-btn"
+          onClick={onOpenNewTask}
+          title="Create Task"
+          aria-label="Create Task"
+          style={{
+            background: 'rgba(255, 255, 255, 0.12)',
+            color: '#FFFFFF'
+          }}
+        >
+          <PlusCircle size={20} />
+        </button>
+      )}
 
       {/* Role Switcher Pill in Bottom Nav */}
       <button

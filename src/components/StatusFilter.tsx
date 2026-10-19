@@ -26,7 +26,7 @@ export const StatusFilter: React.FC<StatusFilterProps> = ({
   ];
 
   return (
-    <div style={{
+    <div className="status-filter-container" style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -86,7 +86,7 @@ export const StatusFilter: React.FC<StatusFilterProps> = ({
       </div>
 
       {/* Search Input */}
-      <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: '300px' }}>
+      <div className="status-filter-search" style={{ position: 'relative', flex: '1 1 200px', maxWidth: '300px' }}>
         <Search 
           size={16} 
           style={{ 

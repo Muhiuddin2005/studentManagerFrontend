@@ -6,10 +6,25 @@ import {
   User,
   RegisterInput,
   VerifyInput,
-  LoginInput
+  LoginStepResult,
+  AuthSuccessResult
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const rawBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim().replace(/\/+$/, '');
+const API_BASE_URL = rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`;
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem('tutorflow_token');
+  } catch {
+    return null;
+  }
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -25,7 +40,7 @@ export async function checkHealth(): Promise<ServerStatus> {
 }
 
 // ==========================================
-// Authentication APIs
+// Authentication APIs (Password-Only Login, Resend OTP & JWT)
 // ==========================================
 
 export interface RegisterResponse {
@@ -34,15 +49,55 @@ export interface RegisterResponse {
   devCode?: string;
 }
 
-export interface VerifyResponse {
+export interface ResendCodeResponse {
   success: boolean;
   message: string;
-  user: User;
+  devCode?: string;
 }
 
-export interface LoginResponse {
-  success: boolean;
-  user: User;
+/**
+ * Validates active JWT token with backend and retrieves user profile on reload
+ */
+export async function getMe(): Promise<{ success: boolean; user: User }> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+  const res = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    }
+  });
+  return handleResponse<{ success: boolean; user: User }>(res);
+}
+
+/**
+ * Directly switches active role between Mohona and Tutor Axis with signed JWT
+ */
+export async function switchRole(role: Role): Promise<AuthSuccessResult> {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/auth/switch-role`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({ role })
+  });
+  return handleResponse<AuthSuccessResult>(res);
+}
+
+/**
+ * 1-click instant demo login with signed JWT for testing
+ */
+export async function demoLogin(role: Role): Promise<AuthSuccessResult> {
+  const res = await fetch(`${API_BASE_URL}/auth/demo-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role })
+  });
+  return handleResponse<AuthSuccessResult>(res);
 }
 
 export interface ResendCodeResponse {
@@ -51,6 +106,10 @@ export interface ResendCodeResponse {
   devCode?: string;
 }
 
+/**
+ * Initiates registration with email, password, name, and role.
+ * Dispatches 6-digit verification code via Resend.
+ */
 export async function register(input: RegisterInput): Promise<RegisterResponse> {
   const res = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
@@ -60,32 +119,56 @@ export async function register(input: RegisterInput): Promise<RegisterResponse> 
   return handleResponse<RegisterResponse>(res);
 }
 
-export async function verifyEmail(input: VerifyInput): Promise<VerifyResponse> {
+/**
+ * Verifies email for registration and returns JWT token & user object.
+ */
+export async function verifyEmail(input: VerifyInput): Promise<AuthSuccessResult> {
   const res = await fetch(`${API_BASE_URL}/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   });
-  return handleResponse<VerifyResponse>(res);
+  return handleResponse<AuthSuccessResult>(res);
 }
 
-export async function login(input: LoginInput): Promise<LoginResponse> {
+/**
+ * Log in with ONLY password (or optional email).
+ * Dispatches 6-digit OTP code to user's email via Resend.
+ */
+export async function loginWithPassword(password: string, email?: string): Promise<LoginStepResult> {
   const res = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input)
+    body: JSON.stringify({ password, email })
   });
-  return handleResponse<LoginResponse>(res);
+  return handleResponse<LoginStepResult>(res);
 }
 
-export async function resendCode(email: string): Promise<ResendCodeResponse> {
+/**
+ * Verifies the 6-digit OTP code sent via Resend for login.
+ * Returns JWT token and authenticated user.
+ */
+export async function verifyLoginOtp(email: string, code: string): Promise<AuthSuccessResult> {
+  const res = await fetch(`${API_BASE_URL}/auth/verify-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code })
+  });
+  return handleResponse<AuthSuccessResult>(res);
+}
+
+/**
+ * Resends a fresh 6-digit OTP code via Resend
+ */
+export async function resendCode(email: string, type: 'login' | 'register' = 'login'): Promise<ResendCodeResponse> {
   const res = await fetch(`${API_BASE_URL}/auth/resend-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email, type })
   });
   return handleResponse<ResendCodeResponse>(res);
 }
+
 
 // ==========================================
 // Task & Timeline APIs
@@ -107,12 +190,20 @@ export async function fetchTasks(filter: { status?: string; student_id?: string 
   }
 
   const url = `${API_BASE_URL}/tasks${params.toString() ? `?${params.toString()}` : ''}`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
   return handleResponse<FetchTasksResponse>(res);
 }
 
 export async function fetchTaskById(taskId: string): Promise<{ success: boolean; data: Task }> {
-  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`);
+  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
   return handleResponse<{ success: boolean; data: Task }>(res);
 }
 
@@ -120,7 +211,8 @@ export async function createTask(taskData: any): Promise<{ success: boolean; dat
   const res = await fetch(`${API_BASE_URL}/tasks`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
     },
     body: JSON.stringify(taskData)
   });
@@ -134,7 +226,8 @@ export async function updateTaskStatus(
   const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/status`, {
     method: 'PATCH',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
     },
     body: JSON.stringify({ status, actor_role, note, question_text })
   });
@@ -147,6 +240,9 @@ export async function uploadAttachment(
 ): Promise<{ success: boolean; message: string; task: Task }> {
   const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/attachments`, {
     method: 'POST',
+    headers: {
+      ...getAuthHeaders()
+    },
     body: formData
   });
   return handleResponse<{ success: boolean; message: string; task: Task }>(res);
@@ -159,9 +255,70 @@ export async function addComment(
   const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/comments`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
     },
     body: JSON.stringify({ message, author_role, author_name })
   });
   return handleResponse<{ success: boolean; task: Task }>(res);
 }
+
+// ==========================================
+// 7-Day Weekly Routine APIs
+// ==========================================
+
+import type { RoutineItem, CreateRoutineInput } from '../types';
+
+export async function fetchRoutines(): Promise<{ success: boolean; count: number; data: RoutineItem[] }> {
+  const res = await fetch(`${API_BASE_URL}/routines`, {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  return handleResponse<{ success: boolean; count: number; data: RoutineItem[] }>(res);
+}
+
+export async function createRoutine(
+  data: CreateRoutineInput
+): Promise<{ success: boolean; data: RoutineItem }> {
+  const res = await fetch(`${API_BASE_URL}/routines`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(data)
+  });
+  return handleResponse<{ success: boolean; data: RoutineItem }>(res);
+}
+
+export async function deleteRoutine(
+  id: string,
+  actorRole: Role
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/routines/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-actor-role': actorRole,
+      ...getAuthHeaders()
+    }
+  });
+  return handleResponse<{ success: boolean; message: string }>(res);
+}
+
+
+// ==========================================
+// Attachment URL Helper
+// ==========================================
+
+export function resolveAttachmentUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // Local static uploads folder
+  const base = API_BASE_URL.replace(/\/api\/?$/, '');
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+

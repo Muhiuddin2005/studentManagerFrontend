@@ -1,10 +1,11 @@
 import React from 'react';
 import { CheckCircle2, Circle, AlertCircle } from 'lucide-react';
-import { TaskStatus } from '../types';
+import { TaskStatus, Role } from '../types';
 
 interface TimelineStepperProps {
   currentStatus: TaskStatus;
   onStatusChange?: (status: TaskStatus) => void;
+  userRole?: Role;
 }
 
 const STEPS: Array<{ key: TaskStatus; label: string }> = [
@@ -16,7 +17,8 @@ const STEPS: Array<{ key: TaskStatus; label: string }> = [
 
 export const TimelineStepper: React.FC<TimelineStepperProps> = ({ 
   currentStatus, 
-  onStatusChange 
+  onStatusChange,
+  userRole = 'student'
 }) => {
   const currentIndex = STEPS.findIndex(s => s.key === currentStatus);
 
@@ -29,7 +31,7 @@ export const TimelineStepper: React.FC<TimelineStepperProps> = ({
         position: 'relative'
       }}>
         {/* Connector Line */}
-        <div style={{
+        <div className="stepper-line" style={{
           position: 'absolute',
           top: '16px',
           left: '20px',
@@ -85,6 +87,8 @@ export const TimelineStepper: React.FC<TimelineStepperProps> = ({
             iconColor = 'var(--primary)';
           }
 
+          const isDoneRestricted = userRole === 'student' && step.key === 'done';
+
           return (
             <div 
               key={step.key} 
@@ -93,12 +97,16 @@ export const TimelineStepper: React.FC<TimelineStepperProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 zIndex: 2,
-                cursor: 'pointer'
+                cursor: isDoneRestricted ? 'not-allowed' : 'pointer',
+                opacity: isDoneRestricted && !isCurrent ? 0.65 : 1
               }}
-              onClick={() => onStatusChange && onStatusChange(step.key)}
-              title={`Switch to ${step.label}`}
+              onClick={() => {
+                if (isDoneRestricted) return;
+                onStatusChange && onStatusChange(step.key);
+              }}
+              title={isDoneRestricted ? 'Tutor verification required to mark as Done' : `Switch to ${step.label}`}
             >
-              <div style={{
+              <div className="stepper-circle" style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '50%',
@@ -121,13 +129,15 @@ export const TimelineStepper: React.FC<TimelineStepperProps> = ({
                   <Circle size={12} />
                 )}
               </div>
-              <span style={{
+              <span className="stepper-label" style={{
                 fontSize: '0.725rem',
                 fontWeight: isCurrent ? 800 : 600,
                 color: textColor,
                 marginTop: '0.35rem',
                 textAlign: 'center',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'normal',
+                maxWidth: '75px',
+                lineHeight: 1.2
               }}>
                 {step.label}
               </span>

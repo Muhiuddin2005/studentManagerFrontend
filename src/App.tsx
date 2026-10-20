@@ -11,6 +11,7 @@ import AuthModal from './components/AuthModal';
 import WeeklyRoutine from './components/WeeklyRoutine';
 import Toast from './components/Toast';
 import LogoutConfirmModal from './components/LogoutConfirmModal';
+import LoginPage from './components/LoginPage';
 import { useAuth } from './context/AuthContext';
 import { StatusBadge, SubjectBadge } from './components/Badge';
 import * as api from './services/api';
@@ -36,6 +37,8 @@ export default function App() {
   const { 
     user: currentUser, 
     role, 
+    isAuthenticated,
+    isInitializing,
     toast, 
     hideToast, 
     switchRoleDirectly 
@@ -70,9 +73,11 @@ export default function App() {
   const [commentInput, setCommentInput] = useState<string>('');
 
   useEffect(() => {
-    loadTasks();
+    if (isAuthenticated) {
+      loadTasks();
+    }
     checkHealth();
-  }, []);
+  }, [isAuthenticated]);
 
   async function checkHealth() {
     try {
@@ -211,6 +216,42 @@ export default function App() {
     updateRaised: tasks.filter(t => t.status === 'update raised').length,
     done: tasks.filter(t => t.status === 'done').length
   };
+
+  if (isInitializing) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-canvas)',
+        gap: '1rem'
+      }}>
+        <div className="animate-spin" style={{ display: 'inline-block' }}>
+          <Clock size={36} color="var(--primary)" />
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem' }}>
+          Loading TutorFlow...
+        </p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="app-container" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Navbar
+          onOpenNewTaskModal={() => {}}
+          serverStatus={serverStatus}
+        />
+        <main style={{ flex: 1 }}>
+          <LoginPage />
+        </main>
+        {toast && <Toast toast={toast} onClose={hideToast} />}
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">

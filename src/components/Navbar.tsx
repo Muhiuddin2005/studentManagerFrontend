@@ -1,10 +1,9 @@
 import React from 'react';
 import { 
   GraduationCap, 
-  Plus, 
-  Search, 
-  LogIn, 
-  LogOut 
+  LogOut,
+  Plus,
+  Search
 } from 'lucide-react';
 import { ServerStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -23,8 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     user, 
     role, 
     isAuthenticated, 
-    requestLogout, 
-    openAuthModal 
+    requestLogout 
   } = useAuth();
 
   const isStudent = role === 'student';
@@ -74,15 +72,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 fontWeight: 700,
                 padding: '0.15rem 0.5rem',
                 borderRadius: '999px',
-                background: isStudent ? 'var(--pastel-lilac)' : 'var(--pastel-mint)',
-                color: isStudent ? 'var(--primary)' : 'var(--pastel-mint-text)',
-                border: `1px solid ${isStudent ? 'var(--pastel-lilac-border)' : 'var(--pastel-mint-border)'}`
+                background: isAuthenticated ? (isStudent ? 'var(--pastel-lilac)' : 'var(--pastel-mint)') : 'var(--pastel-lilac)',
+                color: isAuthenticated ? (isStudent ? 'var(--primary)' : 'var(--pastel-mint-text)') : 'var(--primary)',
+                border: `1px solid ${isAuthenticated ? (isStudent ? 'var(--pastel-lilac-border)' : 'var(--pastel-mint-border)') : 'var(--pastel-lilac-border)'}`
               }}>
-                {isStudent ? 'Student View' : 'Tutor Hub'}
+                {isAuthenticated ? (isStudent ? 'Student View' : 'Tutor Hub') : 'Student & Tutor Portal'}
               </span>
             </div>
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }} className="hide-on-mobile">
-              Student to-dos & homework timeline
+              {isAuthenticated ? 'Student to-dos & homework timeline' : 'Sign in to access your daily timetable & tasks'}
             </p>
           </div>
         </div>
@@ -124,36 +122,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
           ) : (
-            /* Unauthenticated State: Log In Toggle & Register */
+            /* Unauthenticated State */
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => openAuthModal('login')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  padding: '0.42rem 0.95rem',
-                  borderRadius: '999px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700
-                }}
-              >
-                <LogIn size={14} />
-                <span>Log In</span>
-              </button>
-              <button
-                className="btn btn-secondary hide-on-mobile"
-                onClick={() => openAuthModal('register')}
-                style={{
-                  padding: '0.42rem 0.9rem',
-                  borderRadius: '999px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700
-                }}
-              >
-                <span>Register</span>
-              </button>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                background: 'var(--bg-canvas)',
+                padding: '0.35rem 0.85rem',
+                borderRadius: '999px',
+                border: '1px solid #E2E6F0'
+              }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+                <span>Authentication Required</span>
+              </div>
             </div>
           )}
 

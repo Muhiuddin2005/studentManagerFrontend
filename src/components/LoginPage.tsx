@@ -53,18 +53,18 @@ export const LoginPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  // Handle password login
+  // Handle email & password login
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!password.trim()) {
-      setError('Please enter your account password.');
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both your email address and password.');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      const res = await loginWithPassword(password.trim(), email.trim() || undefined);
+      const res = await loginWithPassword(email.trim(), password.trim());
       if (res.success && res.step === 'verify_otp') {
         setTargetEmail(res.email);
         setMaskedEmail(res.maskedEmail || res.email);
@@ -74,7 +74,7 @@ export const LoginPage: React.FC = () => {
         setResendCooldown(60);
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please verify your password or email.');
+      setError(err.message || 'Login failed. Please verify your email and password.');
     } finally {
       setLoading(false);
     }
@@ -604,7 +604,34 @@ export const LoginPage: React.FC = () => {
               {/* SIGN IN FORM */}
               {activeTab === 'login' && (
                 <form onSubmit={handleLogin}>
+                  {/* Email Address (Mandatory) */}
                   <div style={{ marginBottom: '1.1rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.4rem' }}>
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="e.g. mohona@student.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '14px',
+                        border: '1.5px solid #E2E6F0',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        background: 'var(--bg-canvas)',
+                        transition: 'border-color 0.2s'
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = 'var(--primary)')}
+                      onBlur={(e) => (e.target.style.borderColor = '#E2E6F0')}
+                      required
+                    />
+                  </div>
+
+                  {/* Password */}
+                  <div style={{ marginBottom: '1.5rem' }}>
                     <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.4rem' }}>
                       Account Password *
                     </label>
@@ -647,42 +674,14 @@ export const LoginPage: React.FC = () => {
                         {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                       </button>
                     </div>
-                  </div>
-
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                        Email Address <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(Optional if unique)</span>
-                      </label>
-                    </div>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="email"
-                        placeholder="e.g. mohona@student.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem 1rem',
-                          borderRadius: '14px',
-                          border: '1.5px solid #E2E6F0',
-                          fontSize: '0.9rem',
-                          outline: 'none',
-                          background: 'var(--bg-canvas)',
-                          transition: 'border-color 0.2s'
-                        }}
-                        onFocus={(e) => (e.target.style.borderColor = 'var(--primary)')}
-                        onBlur={(e) => (e.target.style.borderColor = '#E2E6F0')}
-                      />
-                    </div>
-                    <span style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginTop: '0.3rem', display: 'block' }}>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginTop: '0.35rem', display: 'block' }}>
                       A secure 6-digit confirmation code will be dispatched to your email.
                     </span>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={loading || !password.trim()}
+                    disabled={loading || !email.trim() || !password.trim()}
                     style={{
                       width: '100%',
                       padding: '0.85rem',
@@ -692,8 +691,8 @@ export const LoginPage: React.FC = () => {
                       color: '#FFFFFF',
                       fontWeight: 800,
                       fontSize: '0.95rem',
-                      cursor: loading || !password.trim() ? 'not-allowed' : 'pointer',
-                      opacity: loading || !password.trim() ? 0.7 : 1,
+                      cursor: loading || !email.trim() || !password.trim() ? 'not-allowed' : 'pointer',
+                      opacity: loading || !email.trim() || !password.trim() ? 0.7 : 1,
                       boxShadow: 'var(--shadow-glow)',
                       display: 'flex',
                       alignItems: 'center',
@@ -702,7 +701,7 @@ export const LoginPage: React.FC = () => {
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    {loading ? 'Sending Code...' : 'Sign In with Password'}
+                    {loading ? 'Sending Code...' : 'Continue to Verification'}
                     <ArrowRight size={16} />
                   </button>
                 </form>

@@ -10,8 +10,21 @@ import {
   AuthSuccessResult
 } from '../types';
 
-const rawBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim().replace(/\/+$/, '');
-const API_BASE_URL = rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`;
+function getBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+  if (envUrl) {
+    return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+  }
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocalhost) {
+      return 'https://student-manager-backend.vercel.app/api';
+    }
+  }
+  return 'http://localhost:5000/api';
+}
+
+export const API_BASE_URL = getBaseUrl();
 
 export function getAuthToken(): string | null {
   try {
@@ -26,6 +39,23 @@ export function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err: any) {
+    // If request fails (e.g. localhost unavailable or network switch), attempt fallback to live Vercel backend
+    if (typeof window !== 'undefined' && !url.includes('student-manager-backend.vercel.app')) {
+      const fallbackUrl = url.replace(/^(\/api|http:\/\/[^/]+\/api)/, 'https://student-manager-backend.vercel.app/api');
+      try {
+        return await fetch(fallbackUrl, init);
+      } catch {
+        // Fall through
+      }
+    }
+    throw new Error('Unable to connect to the server. Please check your internet connection or try again.');
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -35,12 +65,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export async function checkHealth(): Promise<ServerStatus> {
-  const res = await fetch(`${API_BASE_URL}/health`);
+  const res = await apiFetch(`${API_BASE_URL}/health`);
   return handleResponse<ServerStatus>(res);
 }
 
 // ==========================================
-// Authentication APIs (Password-Only Login, Email OTP & JWT)
+// Authentication APIs (Email + Password Login, Email OTP & JWT)
 // ==========================================
 
 export interface RegisterResponse {
@@ -61,7 +91,7 @@ export async function getMe(): Promise<{ success: boolean; user: User }> {
   if (!token) {
     throw new Error('No authentication token found');
   }
-  const res = await fetch(`${API_BASE_URL}/auth/me`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/me`, {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
@@ -75,7 +105,7 @@ export async function getMe(): Promise<{ success: boolean; user: User }> {
  */
 export async function switchRole(role: Role): Promise<AuthSuccessResult> {
   const token = getAuthToken();
-  const res = await fetch(`${API_BASE_URL}/auth/switch-role`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/switch-role`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -90,7 +120,7 @@ export async function switchRole(role: Role): Promise<AuthSuccessResult> {
  * 1-click instant demo login with signed JWT for testing
  */
 export async function demoLogin(role: Role): Promise<AuthSuccessResult> {
-  const res = await fetch(`${API_BASE_URL}/auth/demo-login`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/demo-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role })
@@ -98,13 +128,12 @@ export async function demoLogin(role: Role): Promise<AuthSuccessResult> {
   return handleResponse<AuthSuccessResult>(res);
 }
 
-
 /**
  * Initiates registration with email, password, name, and role.
  * Dispatches 6-digit verification code via email.
  */
 export async function register(input: RegisterInput): Promise<RegisterResponse> {
-  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
@@ -116,7 +145,7 @@ export async function register(input: RegisterInput): Promise<RegisterResponse> 
  * Verifies email for registration and returns JWT token & user object.
  */
 export async function verifyEmail(input: VerifyInput): Promise<AuthSuccessResult> {
-  const res = await fetch(`${API_BASE_URL}/auth/verify`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
@@ -125,14 +154,14 @@ export async function verifyEmail(input: VerifyInput): Promise<AuthSuccessResult
 }
 
 /**
- * Log in with ONLY password (or optional email).
- * Dispatches 6-digit OTP code to user's email.
+ * Log in with Email and Password (both mandatory).
+ * Matches user credentials in database and dispatches 6-digit OTP code to user's email.
  */
-export async function loginWithPassword(password: string, email?: string): Promise<LoginStepResult> {
-  const res = await fetch(`${API_BASE_URL}/auth/login`, {
+export async function loginWithPassword(email: string, password: string): Promise<LoginStepResult> {
+  const res = await apiFetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password, email })
+    body: JSON.stringify({ email: email.trim(), password: password.trim() })
   });
   return handleResponse<LoginStepResult>(res);
 }
@@ -142,7 +171,7 @@ export async function loginWithPassword(password: string, email?: string): Promi
  * Returns JWT token and authenticated user.
  */
 export async function verifyLoginOtp(email: string, code: string): Promise<AuthSuccessResult> {
-  const res = await fetch(`${API_BASE_URL}/auth/verify-login`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/verify-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code })
@@ -154,14 +183,13 @@ export async function verifyLoginOtp(email: string, code: string): Promise<AuthS
  * Resends a fresh 6-digit OTP code via email
  */
 export async function resendCode(email: string, type: 'login' | 'register' = 'login'): Promise<ResendCodeResponse> {
-  const res = await fetch(`${API_BASE_URL}/auth/resend-code`, {
+  const res = await apiFetch(`${API_BASE_URL}/auth/resend-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, type })
   });
   return handleResponse<ResendCodeResponse>(res);
 }
-
 
 // ==========================================
 // Task & Timeline APIs
@@ -183,7 +211,7 @@ export async function fetchTasks(filter: { status?: string; student_id?: string 
   }
 
   const url = `${API_BASE_URL}/tasks${params.toString() ? `?${params.toString()}` : ''}`;
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     headers: {
       ...getAuthHeaders()
     }
@@ -192,7 +220,7 @@ export async function fetchTasks(filter: { status?: string; student_id?: string 
 }
 
 export async function fetchTaskById(taskId: string): Promise<{ success: boolean; data: Task }> {
-  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}`, {
     headers: {
       ...getAuthHeaders()
     }
@@ -201,7 +229,7 @@ export async function fetchTaskById(taskId: string): Promise<{ success: boolean;
 }
 
 export async function createTask(taskData: any): Promise<{ success: boolean; data: Task }> {
-  const res = await fetch(`${API_BASE_URL}/tasks`, {
+  const res = await apiFetch(`${API_BASE_URL}/tasks`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -216,7 +244,7 @@ export async function updateTaskStatus(
   taskId: string, 
   { status, actor_role, note, question_text }: { status: TaskStatus; actor_role?: Role; note?: string; question_text?: string }
 ): Promise<{ success: boolean; data: Task }> {
-  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/status`, {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}/status`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -231,7 +259,7 @@ export async function uploadAttachment(
   taskId: string, 
   formData: FormData
 ): Promise<{ success: boolean; message: string; task: Task }> {
-  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/attachments`, {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}/attachments`, {
     method: 'POST',
     headers: {
       ...getAuthHeaders()
@@ -241,11 +269,23 @@ export async function uploadAttachment(
   return handleResponse<{ success: boolean; message: string; task: Task }>(res);
 }
 
+export async function addRemarks(taskId: string, remarks: string): Promise<{ success: boolean; data: Task }> {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}/remarks`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({ remarks })
+  });
+  return handleResponse<{ success: boolean; data: Task }>(res);
+}
+
 export async function addComment(
   taskId: string, 
-  { message, author_role, author_name }: { message: string; author_role?: Role; author_name?: string }
+  { message, author_role, author_name }: { message: string; author_role: Role; author_name: string }
 ): Promise<{ success: boolean; task: Task }> {
-  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/comments`, {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}/comments`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -256,25 +296,42 @@ export async function addComment(
   return handleResponse<{ success: boolean; task: Task }>(res);
 }
 
-// ==========================================
-// 7-Day Weekly Routine APIs
-// ==========================================
-
-import type { RoutineItem, CreateRoutineInput } from '../types';
-
-export async function fetchRoutines(): Promise<{ success: boolean; count: number; data: RoutineItem[] }> {
-  const res = await fetch(`${API_BASE_URL}/routines`, {
+export async function deleteTask(taskId: string): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}`, {
+    method: 'DELETE',
     headers: {
       ...getAuthHeaders()
     }
   });
-  return handleResponse<{ success: boolean; count: number; data: RoutineItem[] }>(res);
+  return handleResponse<{ success: boolean; message: string }>(res);
 }
 
-export async function createRoutine(
-  data: CreateRoutineInput
-): Promise<{ success: boolean; data: RoutineItem }> {
-  const res = await fetch(`${API_BASE_URL}/routines`, {
+export async function clearAllDatabaseData(): Promise<{ success: boolean; message: string; counts?: any }> {
+  const res = await apiFetch(`${API_BASE_URL}/admin/clear-database`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    }
+  });
+  return handleResponse<{ success: boolean; message: string; counts?: any }>(res);
+}
+
+// ==========================================
+// 7-Day Routine APIs
+// ==========================================
+
+export async function fetchWeeklyRoutine(): Promise<{ success: boolean; data: any[] }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines`, {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  return handleResponse<{ success: boolean; data: any[] }>(res);
+}
+
+export async function createRoutineItem(data: any): Promise<{ success: boolean; data: any }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -282,14 +339,55 @@ export async function createRoutine(
     },
     body: JSON.stringify(data)
   });
-  return handleResponse<{ success: boolean; data: RoutineItem }>(res);
+  return handleResponse<{ success: boolean; data: any }>(res);
 }
 
-export async function deleteRoutine(
-  id: string,
-  actorRole: Role
-): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_BASE_URL}/routines/${id}`, {
+export async function updateRoutineItem(id: string, data: any): Promise<{ success: boolean; data: any }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(data)
+  });
+  return handleResponse<{ success: boolean; data: any }>(res);
+}
+
+export async function deleteRoutineItem(id: string): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines/${id}`, {
+    method: 'DELETE',
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  return handleResponse<{ success: boolean; message: string }>(res);
+}
+
+// Routine aliases for WeeklyRoutine component
+export async function fetchRoutines(): Promise<{ success: boolean; count: number; data: any[] }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines`, {
+    headers: {
+      ...getAuthHeaders()
+    }
+  });
+  return handleResponse<{ success: boolean; count: number; data: any[] }>(res);
+}
+
+export async function createRoutine(data: any): Promise<{ success: boolean; data: any }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(data)
+  });
+  return handleResponse<{ success: boolean; data: any }>(res);
+}
+
+export async function deleteRoutine(id: string, actorRole: Role): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/routines/${id}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -299,7 +397,6 @@ export async function deleteRoutine(
   });
   return handleResponse<{ success: boolean; message: string }>(res);
 }
-
 
 // ==========================================
 // Attachment URL Helper

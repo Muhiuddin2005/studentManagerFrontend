@@ -65,18 +65,18 @@ export const AuthModal: React.FC = () => {
 
   if (!isAuthModalOpen) return null;
 
-  // Step 1: Login with password only
+  // Step 1: Login with email and password
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!password.trim()) {
-      setError('Please enter your account password.');
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both your email address and password.');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      const res = await loginWithPassword(password.trim(), email.trim() || undefined);
+      const res = await loginWithPassword(email.trim(), password.trim());
       if (res.success && res.step === 'verify_otp') {
         setTargetEmail(res.email);
         setMaskedEmail(res.maskedEmail || res.email);
@@ -85,7 +85,7 @@ export const AuthModal: React.FC = () => {
         setResendCooldown(60);
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your password.');
+      setError(err.message || 'Login failed. Please verify your email and password.');
     } finally {
       setLoading(false);
     }
@@ -374,16 +374,26 @@ export const AuthModal: React.FC = () => {
             </div>
           )}
 
-          {/* VIEW 1: Login with Password ONLY */}
+          {/* VIEW 1: Login with Email & Password */}
           {mode === 'login' && (
             <form onSubmit={handlePasswordLogin}>
               <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Account Password *</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
-                    Password-Only Login
-                  </span>
-                </label>
+                <label className="form-label">Email Address *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="e.g. mohona@student.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Account Password *</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -393,7 +403,6 @@ export const AuthModal: React.FC = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     style={{ paddingRight: '2.5rem' }}
-                    autoFocus
                   />
                   <button
                     type="button"
@@ -413,22 +422,19 @@ export const AuthModal: React.FC = () => {
                   </button>
                 </div>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.4rem' }}>
-                  💡 Enter your account password. TutorFlow will match your account and send a 6-digit verification code to your email.
+                  A secure 6-digit verification code will be dispatched to your email.
                 </p>
               </div>
-
-
-
 
               <button
                 type="submit"
                 className="btn btn-primary"
                 style={{ width: '100%', borderRadius: '999px', padding: '0.75rem', fontSize: '0.9rem' }}
-                disabled={loading}
+                disabled={loading || !email.trim() || !password.trim()}
               >
-                {loading ? 'Verifying Password...' : (
+                {loading ? 'Sending Code...' : (
                   <>
-                    <span>Continue with Password</span>
+                    <span>Continue to Verification</span>
                     <ArrowRight size={16} />
                   </>
                 )}

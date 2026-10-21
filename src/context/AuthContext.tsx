@@ -8,7 +8,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   role: Role;
   isInitializing: boolean;
-  loginWithPassword: (password: string, email?: string) => Promise<LoginStepResult>;
+  loginWithPassword: (email: string, password: string) => Promise<LoginStepResult>;
   verifyLoginOtp: (email: string, code: string) => Promise<AuthSuccessResult>;
   register: (input: RegisterInput) => Promise<api.RegisterResponse>;
   verifyRegisterOtp: (email: string, code: string) => Promise<AuthSuccessResult>;
@@ -157,9 +157,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthModalOpen(false);
   }
 
-  // Step 1: Login with Password ONLY (or with optional email)
-  async function loginWithPassword(password: string, email?: string): Promise<LoginStepResult> {
-    const res = await api.loginWithPassword(password, email);
+  // Step 1: Login with Email and Password
+  async function loginWithPassword(email: string, password: string): Promise<LoginStepResult> {
+    const res = await api.loginWithPassword(email, password);
     return res;
   }
 

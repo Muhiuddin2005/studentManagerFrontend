@@ -33,7 +33,6 @@ export const LoginPage: React.FC = () => {
   const [verificationCode, setVerificationCode] = useState<string>('');
   const [targetEmail, setTargetEmail] = useState<string>('');
   const [maskedEmail, setMaskedEmail] = useState<string>('');
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   // OTP view state
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
@@ -69,7 +68,6 @@ export const LoginPage: React.FC = () => {
       if (res.success && res.step === 'verify_otp') {
         setTargetEmail(res.email);
         setMaskedEmail(res.maskedEmail || res.email);
-        setDevCode(res.devCode || null);
         setVerifyType('login');
         setIsVerifying(true);
         setSuccessMsg(`Verification code sent to ${res.maskedEmail || res.email}`);
@@ -108,7 +106,6 @@ export const LoginPage: React.FC = () => {
       if (res.success) {
         setTargetEmail(cleanEmail.toLowerCase());
         setMaskedEmail(cleanEmail.toLowerCase());
-        setDevCode(res.devCode || null);
         setVerifyType('register');
         setIsVerifying(true);
         setSuccessMsg(`Verification code sent to ${cleanEmail}`);
@@ -150,10 +147,7 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await resendOtp(targetEmail, verifyType);
-      if (res.devCode) {
-        setDevCode(res.devCode);
-      }
+      await resendOtp(targetEmail, verifyType);
       setSuccessMsg(`Fresh verification code sent to ${targetEmail}`);
       setResendCooldown(60);
     } catch (err: any) {
@@ -391,23 +385,6 @@ export const LoginPage: React.FC = () => {
                   Enter the 6-digit code sent to <strong>{maskedEmail || targetEmail}</strong>
                 </p>
               </div>
-
-              {/* Dev Code Helper */}
-              {devCode && (
-                <div style={{
-                  background: 'var(--pastel-amber)',
-                  border: '1px solid var(--pastel-amber-border)',
-                  color: 'var(--pastel-amber-text)',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '14px',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  textAlign: 'center',
-                  marginBottom: '1.25rem'
-                }}>
-                  Dev Test Code: <span style={{ letterSpacing: '0.2em', fontSize: '1.05rem' }}>{devCode}</span>
-                </div>
-              )}
 
               {error && (
                 <div style={{

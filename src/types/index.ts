@@ -122,7 +122,6 @@ export interface LoginStepResult {
   email: string;
   maskedEmail: string;
   message: string;
-  devCode?: string;
 }
 
 export interface AuthSuccessResult {

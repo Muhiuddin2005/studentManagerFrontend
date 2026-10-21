@@ -40,19 +40,17 @@ export async function checkHealth(): Promise<ServerStatus> {
 }
 
 // ==========================================
-// Authentication APIs (Password-Only Login, Resend OTP & JWT)
+// Authentication APIs (Password-Only Login, Email OTP & JWT)
 // ==========================================
 
 export interface RegisterResponse {
   success: boolean;
   message: string;
-  devCode?: string;
 }
 
 export interface ResendCodeResponse {
   success: boolean;
   message: string;
-  devCode?: string;
 }
 
 /**
@@ -100,15 +98,10 @@ export async function demoLogin(role: Role): Promise<AuthSuccessResult> {
   return handleResponse<AuthSuccessResult>(res);
 }
 
-export interface ResendCodeResponse {
-  success: boolean;
-  message: string;
-  devCode?: string;
-}
 
 /**
  * Initiates registration with email, password, name, and role.
- * Dispatches 6-digit verification code via Resend.
+ * Dispatches 6-digit verification code via email.
  */
 export async function register(input: RegisterInput): Promise<RegisterResponse> {
   const res = await fetch(`${API_BASE_URL}/auth/register`, {
@@ -133,7 +126,7 @@ export async function verifyEmail(input: VerifyInput): Promise<AuthSuccessResult
 
 /**
  * Log in with ONLY password (or optional email).
- * Dispatches 6-digit OTP code to user's email via Resend.
+ * Dispatches 6-digit OTP code to user's email.
  */
 export async function loginWithPassword(password: string, email?: string): Promise<LoginStepResult> {
   const res = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -145,7 +138,7 @@ export async function loginWithPassword(password: string, email?: string): Promi
 }
 
 /**
- * Verifies the 6-digit OTP code sent via Resend for login.
+ * Verifies the 6-digit OTP code sent via email for login.
  * Returns JWT token and authenticated user.
  */
 export async function verifyLoginOtp(email: string, code: string): Promise<AuthSuccessResult> {
@@ -158,7 +151,7 @@ export async function verifyLoginOtp(email: string, code: string): Promise<AuthS
 }
 
 /**
- * Resends a fresh 6-digit OTP code via Resend
+ * Resends a fresh 6-digit OTP code via email
  */
 export async function resendCode(email: string, type: 'login' | 'register' = 'login'): Promise<ResendCodeResponse> {
   const res = await fetch(`${API_BASE_URL}/auth/resend-code`, {

@@ -36,7 +36,6 @@ export const AuthModal: React.FC = () => {
   const [verificationCode, setVerificationCode] = useState<string>('');
   const [maskedEmail, setMaskedEmail] = useState<string>('');
   const [targetEmail, setTargetEmail] = useState<string>('');
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   // UI state
   const [loading, setLoading] = useState<boolean>(false);
@@ -49,7 +48,6 @@ export const AuthModal: React.FC = () => {
       setMode(authModalMode);
       setError(null);
       setSuccessMsg(null);
-      setDevCode(null);
       setVerificationCode('');
       setPassword('');
       setEmail('');
@@ -82,9 +80,8 @@ export const AuthModal: React.FC = () => {
       if (res.success && res.step === 'verify_otp') {
         setTargetEmail(res.email);
         setMaskedEmail(res.maskedEmail || res.email);
-        setDevCode(res.devCode || null);
         setMode('verify_login');
-        setSuccessMsg(`Verification code sent via Resend to ${res.maskedEmail || res.email}`);
+        setSuccessMsg(`Verification code sent to ${res.maskedEmail || res.email}`);
         setResendCooldown(60);
       }
     } catch (err: any) {
@@ -139,9 +136,8 @@ export const AuthModal: React.FC = () => {
       if (res.success) {
         setTargetEmail(cleanEmail.toLowerCase());
         setMaskedEmail(cleanEmail.toLowerCase());
-        setDevCode(res.devCode || null);
         setMode('verify_register');
-        setSuccessMsg(`Verification code sent via Resend to ${cleanEmail} (${assignedRole === 'tutor' ? 'Home Tutor' : 'Student'} account)`);
+        setSuccessMsg(`Verification code sent to ${cleanEmail} (${assignedRole === 'tutor' ? 'Home Tutor' : 'Student'} account)`);
         setResendCooldown(60);
       }
     } catch (err: any) {
@@ -177,11 +173,8 @@ export const AuthModal: React.FC = () => {
       setLoading(true);
       setError(null);
       const type = mode === 'verify_login' ? 'login' : 'register';
-      const res = await resendOtp(targetEmail, type);
-      if (res.devCode) {
-        setDevCode(res.devCode);
-      }
-      setSuccessMsg(`Fresh verification code sent via Resend to ${targetEmail}`);
+      await resendOtp(targetEmail, type);
+      setSuccessMsg(`Fresh verification code sent to ${targetEmail}`);
       setResendCooldown(60);
     } catch (err: any) {
       setError(err.message || 'Failed to resend code');
@@ -275,9 +268,9 @@ export const AuthModal: React.FC = () => {
                 {(mode === 'verify_login' || mode === 'verify_register') && 'Email Verification'}
               </h2>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {mode === 'login' && 'Log in with only your password & Resend email OTP'}
+                {mode === 'login' && 'Log in with password & email OTP'}
                 {mode === 'register' && 'Register with email & password'}
-                {mode === 'verify_login' && 'Enter 6-digit code dispatched via Resend'}
+                {mode === 'verify_login' && 'Enter 6-digit code dispatched to your email'}
                 {mode === 'verify_register' && 'Verify email to activate your learning timeline'}
               </span>
             </div>
@@ -540,7 +533,7 @@ export const AuthModal: React.FC = () => {
                   marginBottom: '0.75rem'
                 }}>
                   <Mail size={14} />
-                  <span>Sent via Resend to {maskedEmail}</span>
+                  <span>Sent to {maskedEmail}</span>
                 </div>
 
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.2rem 0' }}>
@@ -573,39 +566,6 @@ export const AuthModal: React.FC = () => {
                   }}
                 />
               </div>
-
-              {/* Dev Preview Autofill pill */}
-              {devCode && (
-                <div style={{
-                  background: '#F1F3F8',
-                  borderRadius: '12px',
-                  padding: '0.65rem 0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '1rem',
-                  fontSize: '0.75rem',
-                  color: 'var(--text-dim)'
-                }}>
-                  <span>Dev OTP preview: <strong style={{ color: 'var(--primary)', letterSpacing: '2px' }}>{devCode}</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => setVerificationCode(devCode)}
-                    style={{
-                      background: 'var(--primary)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      padding: '0.2rem 0.55rem',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Auto-Fill
-                  </button>
-                </div>
-              )}
 
               <button
                 type="submit"

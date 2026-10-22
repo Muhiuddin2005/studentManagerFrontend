@@ -240,10 +240,19 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
           gap: '1.25rem'
         }}>
           {filteredTeachers.map((teacher) => {
-            const isAccepted = teacher.connectionStatus === 'accepted';
-            const isPending = teacher.connectionStatus === 'pending';
+            const normTeacherEmail = teacher.email.trim().toLowerCase();
+            const isCurrentActive = Boolean(
+              activeTuple &&
+              activeTuple.status === 'accepted' &&
+              (activeTuple.tutor_email.trim().toLowerCase() === normTeacherEmail ||
+               (activeTuple.tutor_id && activeTuple.tutor_id === teacher.id))
+            );
+            const isAccepted = teacher.connectionStatus === 'accepted' || isCurrentActive;
+            const isPending = !isAccepted && (
+              teacher.connectionStatus === 'pending' ||
+              Boolean(activeTuple && activeTuple.status === 'pending' && activeTuple.tutor_email.trim().toLowerCase() === normTeacherEmail)
+            );
             const isRequestingThis = requestingEmail === teacher.email;
-            const isCurrentActive = activeTuple && activeTuple.tutor_email === teacher.email;
 
             return (
               <div
@@ -363,8 +372,9 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
 
                       <button
                         onClick={() => {
-                          if (teacher.pair && onSelectTuple) {
-                            onSelectTuple(teacher.pair);
+                          const chosenPair = teacher.pair || (isCurrentActive ? activeTuple : null);
+                          if (chosenPair && onSelectTuple) {
+                            onSelectTuple(chosenPair);
                           }
                         }}
                         className="btn btn-primary"

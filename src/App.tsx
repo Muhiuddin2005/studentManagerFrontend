@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import StatusFilter from './components/StatusFilter';
 
 import StudentDashboard from './components/StudentDashboard';
 import TutorDashboard from './components/TutorDashboard';
 import AttachmentModal from './components/AttachmentModal';
-import BottomNav from './components/BottomNav';
 import Modal from './components/Modal';
 import AuthModal from './components/AuthModal';
 import WeeklyRoutine from './components/WeeklyRoutine';
@@ -63,7 +62,6 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
-  const [mobileTab, setMobileTab] = useState<string>('home');
 
   // Teacher-Student Tuple & Pairing State
   const [activeTuple, setActiveTuple] = useState<TutorStudentPair | null>(null);
@@ -71,6 +69,17 @@ export default function App() {
   const [pendingRequests, setPendingRequests] = useState<TutorStudentPair[]>([]);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'teachers'>('dashboard');
+
+  // Auto show dashboard whenever an active tuple is active or selected
+  const prevActiveTupleId = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeTuple && activeTuple.status === 'accepted') {
+      if (prevActiveTupleId.current !== activeTuple.id) {
+        prevActiveTupleId.current = activeTuple.id;
+        setCurrentView('dashboard');
+      }
+    }
+  }, [activeTuple]);
 
   // Modals state
   const [isNewTaskOpen, setIsNewTaskOpen] = useState<boolean>(false);
@@ -137,9 +146,13 @@ export default function App() {
         if (role === 'student') {
           if (res.data.accepted.length > 0) {
             setActiveTuple(prev => {
-              if (prev && res.data.accepted.some(t => t.id === prev.id)) return prev;
+              if (prev && res.data.accepted.some(t => t.id === prev.id)) {
+                return res.data.accepted.find(t => t.id === prev.id)!;
+              }
               return res.data.accepted[0];
             });
+            // Automatically show dashboard when tuple is active
+            setCurrentView('dashboard');
           } else {
             setActiveTuple(null);
             // First time student has no teacher -> show teacher directory directly
@@ -149,9 +162,13 @@ export default function App() {
           // role === 'tutor'
           if (res.data.accepted.length > 0) {
             setActiveTuple(prev => {
-              if (prev && res.data.accepted.some(t => t.id === prev.id)) return prev;
+              if (prev && res.data.accepted.some(t => t.id === prev.id)) {
+                return res.data.accepted.find(t => t.id === prev.id)!;
+              }
               return res.data.accepted[0];
             });
+            // Automatically show dashboard when tutor has active student
+            setCurrentView('dashboard');
           } else {
             setActiveTuple(null);
           }
@@ -621,26 +638,6 @@ export default function App() {
           </>
         )}
       </main>
-
-      {/* Floating Bottom Navigation Bar (Matching Reference Mockup) */}
-      <BottomNav
-        currentTab={mobileTab}
-        onSelectTab={(tab) => {
-          setMobileTab(tab);
-          if (tab === 'home') {
-            setActiveFilter('all');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-          if (tab === 'timeline') {
-            document.getElementById('weekly-routine-section')?.scrollIntoView({ behavior: 'smooth' });
-          }
-        }}
-        currentRole={role}
-        onToggleRole={(newRole) => switchRoleDirectly(newRole)}
-        onOpenNewTask={() => setIsNewTaskOpen(true)}
-      />
-
-
 
       {/* MODAL 1: Create New Study Task */}
       <Modal

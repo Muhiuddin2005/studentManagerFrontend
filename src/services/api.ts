@@ -296,12 +296,15 @@ export async function addComment(
   return handleResponse<{ success: boolean; task: Task }>(res);
 }
 
-export async function deleteTask(taskId: string): Promise<{ success: boolean; message: string }> {
+export async function deleteTask(taskId: string, actorRole: Role = 'tutor'): Promise<{ success: boolean; message: string }> {
   const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}`, {
     method: 'DELETE',
     headers: {
+      'Content-Type': 'application/json',
+      'X-User-Role': actorRole,
       ...getAuthHeaders()
-    }
+    },
+    body: JSON.stringify({ actor_role: actorRole })
   });
   return handleResponse<{ success: boolean; message: string }>(res);
 }

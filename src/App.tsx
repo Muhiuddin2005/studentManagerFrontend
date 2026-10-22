@@ -30,7 +30,8 @@ import {
   Send, 
   AlertCircle,
   Flag,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 
 export default function App() {
@@ -219,6 +220,30 @@ export default function App() {
       alert(`Comment failed: ${err.message}`);
     }
   }
+
+  // Handle delete task (Tutor authority only)
+  async function handleDeleteTask(task: Task) {
+    if (role !== 'tutor') {
+      alert('Only tutors have the authority to delete tasks.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Permanently delete task "${task.title}" and all related problem screenshots? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const res = await api.deleteTask(task.id, role);
+      if (res.success) {
+        setTasks(prev => prev.filter(t => t.id !== task.id));
+        if (selectedTaskDetails && selectedTaskDetails.id === task.id) {
+          setSelectedTaskDetails(null);
+        }
+      }
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    }
+  }
+
 
   // Calculations for filters and counts
   const filteredTasks = tasks.filter(task => {
@@ -410,6 +435,7 @@ export default function App() {
             onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
             onOpenPreviewImage={(url) => setPreviewImage(url)}
             onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
+            onDeleteTask={handleDeleteTask}
           />
         )}
       </main>
@@ -543,18 +569,44 @@ export default function App() {
       >
         {selectedTaskDetails && (
           <div>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-                <StatusBadge status={selectedTaskDetails.status} />
-                <SubjectBadge subject={selectedTaskDetails.subject} />
+            <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                  <StatusBadge status={selectedTaskDetails.status} />
+                  <SubjectBadge subject={selectedTaskDetails.subject} />
+                </div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  {selectedTaskDetails.title}
+                </h3>
+                {selectedTaskDetails.description && (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.35rem' }}>
+                    {selectedTaskDetails.description}
+                  </p>
+                )}
               </div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                {selectedTaskDetails.title}
-              </h3>
-              {selectedTaskDetails.description && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.35rem' }}>
-                  {selectedTaskDetails.description}
-                </p>
+
+              {role === 'tutor' && (
+                <button
+                  className="btn btn-sm"
+                  style={{
+                    background: '#FFF0F0',
+                    color: '#D32F2F',
+                    border: '1px solid #FFCDD2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.75rem',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                  onClick={() => handleDeleteTask(selectedTaskDetails)}
+                  title="Permanently Delete Task & Attachments"
+                >
+                  <Trash2 size={14} />
+                  <span>Delete Task</span>
+                </button>
               )}
             </div>
 

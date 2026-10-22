@@ -9,7 +9,8 @@ import {
   CheckCircle2, 
   RotateCcw, 
   History,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 
 interface TutorDashboardProps {
@@ -18,6 +19,7 @@ interface TutorDashboardProps {
   onOpenDetailsModal: (task: Task) => void;
   onOpenPreviewImage: (url: string) => void;
   onOpenNewTaskModal: () => void;
+  onDeleteTask: (task: Task) => void;
 }
 
 export const TutorDashboard: React.FC<TutorDashboardProps> = ({
@@ -25,7 +27,8 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
   onStatusChange,
   onOpenDetailsModal,
   onOpenPreviewImage,
-  onOpenNewTaskModal
+  onOpenNewTaskModal,
+  onDeleteTask
 }) => {
   const updateRaisedTasks = tasks.filter(t => t.status === 'update raised');
   const otherTasks = tasks.filter(t => t.status !== 'update raised');
@@ -132,6 +135,26 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                       >
                         <CheckCircle2 size={14} />
                         <span>Verify & Done</span>
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        style={{
+                          background: '#FFF0F0',
+                          color: '#D32F2F',
+                          border: '1px solid #FFCDD2',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          fontWeight: 700,
+                          borderRadius: '8px',
+                          padding: '0.4rem 0.75rem',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => onDeleteTask(task)}
+                        title="Delete Task & Attachments"
+                      >
+                        <Trash2 size={14} />
+                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
@@ -298,6 +321,27 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                   >
                     <MessageSquare size={14} />
                     <span>Provide Feedback</span>
+                  </button>
+
+                  <button
+                    className="btn btn-sm"
+                    style={{
+                      background: '#FFF0F0',
+                      color: '#D32F2F',
+                      border: '1px solid #FFCDD2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.75rem',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => onDeleteTask(task)}
+                    title="Delete Task & Attachments"
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete</span>
                   </button>
                 </div>
 

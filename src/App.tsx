@@ -75,6 +75,22 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) {
       loadTasks();
+
+      // Background silent polling every 6 seconds to keep student and tutor in sync
+      const pollTimer = setInterval(() => {
+        loadTasks(true);
+      }, 6000);
+
+      // Sync immediately when student or tutor switches back to window/tab
+      const handleFocus = () => {
+        loadTasks(true);
+      };
+      window.addEventListener('focus', handleFocus);
+
+      return () => {
+        clearInterval(pollTimer);
+        window.removeEventListener('focus', handleFocus);
+      };
     }
     checkHealth();
   }, [isAuthenticated]);
@@ -88,18 +104,23 @@ export default function App() {
     }
   }
 
-  async function loadTasks() {
+  async function loadTasks(silent = false) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const res = await api.fetchTasks();
       if (res.success) {
         setTasks(res.data);
+        setSelectedTaskDetails(prev => {
+          if (!prev) return null;
+          const fresh = res.data.find(t => t.id === prev.id);
+          return fresh || prev;
+        });
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to connect to backend server');
+      if (!silent) setError(err.message || 'Failed to connect to backend server');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 

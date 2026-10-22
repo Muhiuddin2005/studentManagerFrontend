@@ -43,19 +43,34 @@ export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutin
 
   useEffect(() => {
     loadRoutines();
+
+    // Silent background polling every 8 seconds
+    const timer = setInterval(() => {
+      loadRoutines(true);
+    }, 8000);
+
+    const handleFocus = () => {
+      loadRoutines(true);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
-  async function loadRoutines() {
+  async function loadRoutines(silent = false) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.fetchRoutines();
       if (res.success) {
         setRoutines(res.data);
       }
     } catch (err: any) {
-      console.error('Failed to load routines:', err);
+      if (!silent) console.error('Failed to load routines:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 

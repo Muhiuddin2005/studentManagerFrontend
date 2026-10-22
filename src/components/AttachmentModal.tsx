@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { Image as ImageIcon, Send, Upload, Trash2, Clipboard } from 'lucide-react';
 import { Task, Role, AttachmentSubmitData } from '../types';
+import { confirmAction, showErrorModal } from '../utils/sweetalert';
 
 interface AttachmentModalProps {
   isOpen: boolean;
@@ -78,9 +79,20 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
     e.preventDefault();
     if (!task) return;
     if (!questionText.trim() && !file) {
-      alert('Please provide a question explanation or attach a problem screenshot.');
+      await showErrorModal('Missing Content', 'Please provide a question explanation or attach a problem screenshot.');
       return;
     }
+
+    const isConfirmed = await confirmAction({
+      title: 'Submit Homework Question / Screenshot?',
+      text: autoRaiseUpdate 
+        ? `Submit this attachment and notify tutor for review on "${task.title}"?`
+        : `Attach this file/question to "${task.title}"?`,
+      confirmButtonText: 'Yes, Submit',
+      icon: 'question',
+      isSuccess: true
+    });
+    if (!isConfirmed) return;
 
     try {
       setSubmitting(true);
@@ -97,7 +109,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
       handleClearFile();
       onClose();
     } catch (err: any) {
-      alert(`Submission error: ${err.message}`);
+      await showErrorModal('Submission Error', err.message);
     } finally {
       setSubmitting(false);
     }

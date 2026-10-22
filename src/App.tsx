@@ -33,6 +33,13 @@ import {
   ArrowRight,
   Trash2
 } from 'lucide-react';
+import { 
+  confirmDelete, 
+  confirmStatusTransition, 
+  confirmAction, 
+  showSuccessModal, 
+  showErrorModal 
+} from './utils/sweetalert';
 
 export default function App() {
   const { 
@@ -127,6 +134,9 @@ export default function App() {
 
   // Handle status update
   async function handleStatusChange(task: Task, newStatus: TaskStatus, note?: string) {
+    const isConfirmed = await confirmStatusTransition(task.title, newStatus, role);
+    if (!isConfirmed) return;
+
     try {
       const actorName = currentUser?.name || (role === 'student' ? 'Mohona' : 'Tutor Axis');
       const res = await api.updateTaskStatus(task.id, {
@@ -140,9 +150,10 @@ export default function App() {
         if (selectedTaskDetails && selectedTaskDetails.id === task.id) {
           setSelectedTaskDetails(res.data);
         }
+        await showSuccessModal('Status Updated!', `"${task.title}" is now ${newStatus.toUpperCase()}.`);
       }
     } catch (err: any) {
-      alert(`Error updating status: ${err.message}`);
+      await showErrorModal('Update Failed', err.message);
     }
   }
 
@@ -150,6 +161,15 @@ export default function App() {
   async function handleCreateTask(e: React.FormEvent) {
     e.preventDefault();
     if (!newTaskForm.title.trim()) return;
+
+    const isConfirmed = await confirmAction({
+      title: 'Assign New Task?',
+      text: `Assign "${newTaskForm.title}" (${newTaskForm.subject}) to the study timeline?`,
+      confirmButtonText: 'Yes, Assign Task',
+      icon: 'question',
+      isSuccess: true
+    });
+    if (!isConfirmed) return;
 
     try {
       const creatorName = currentUser?.name || (role === 'student' ? 'Mohona' : 'Tutor Axis');
@@ -173,28 +193,34 @@ export default function App() {
           priority: 'medium',
           deadline: ''
         });
+        await showSuccessModal('Task Assigned!', `"${res.data.title}" has been assigned successfully.`);
       }
     } catch (err: any) {
-      alert(`Error creating task: ${err.message}`);
+      await showErrorModal('Creation Failed', err.message);
     }
   }
 
   // Handle submit attachment
   async function handleAttachmentSubmit(data: AttachmentSubmitData) {
-    const formData = new FormData();
-    if (data.file) {
-      formData.append('file', data.file);
-    }
-    formData.append('question_text', data.questionText);
-    formData.append('uploader_role', data.uploaderRole);
-    formData.append('auto_raise_update', String(data.autoRaiseUpdate));
-
-    const res = await api.uploadAttachment(data.taskId, formData);
-    if (res.success) {
-      setTasks(prev => prev.map(t => t.id === data.taskId ? res.task : t));
-      if (selectedTaskDetails && selectedTaskDetails.id === data.taskId) {
-        setSelectedTaskDetails(res.task);
+    try {
+      const formData = new FormData();
+      if (data.file) {
+        formData.append('file', data.file);
       }
+      formData.append('question_text', data.questionText);
+      formData.append('uploader_role', data.uploaderRole);
+      formData.append('auto_raise_update', String(data.autoRaiseUpdate));
+
+      const res = await api.uploadAttachment(data.taskId, formData);
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === data.taskId ? res.task : t));
+        if (selectedTaskDetails && selectedTaskDetails.id === data.taskId) {
+          setSelectedTaskDetails(res.task);
+        }
+        await showSuccessModal('Uploaded!', 'Homework question / screenshot attached successfully.');
+      }
+    } catch (err: any) {
+      await showErrorModal('Upload Failed', err.message);
     }
   }
 
@@ -215,21 +241,25 @@ export default function App() {
         setSelectedTaskDetails(res.task);
         setTasks(prev => prev.map(t => t.id === res.task.id ? res.task : t));
         setCommentInput('');
+        await showSuccessModal('Feedback Added', 'Guidance note saved to problem dialogue.');
       }
     } catch (err: any) {
-      alert(`Comment failed: ${err.message}`);
+      await showErrorModal('Comment Failed', err.message);
     }
   }
 
   // Handle delete task (Tutor authority only)
   async function handleDeleteTask(task: Task) {
     if (role !== 'tutor') {
-      alert('Only tutors have the authority to delete tasks.');
+      await showErrorModal('Permission Denied', 'Only tutors have the authority to delete tasks.');
       return;
     }
 
-    const confirmed = window.confirm(`Permanently delete task "${task.title}" and all related problem screenshots? This action cannot be undone.`);
-    if (!confirmed) return;
+    const isConfirmed = await confirmDelete(
+      `Delete "${task.title}"?`,
+      'This will permanently delete this task and all attached problem screenshots. This action cannot be undone.'
+    );
+    if (!isConfirmed) return;
 
     try {
       const res = await api.deleteTask(task.id, role);
@@ -238,9 +268,10 @@ export default function App() {
         if (selectedTaskDetails && selectedTaskDetails.id === task.id) {
           setSelectedTaskDetails(null);
         }
+        await showSuccessModal('Deleted!', `Task "${task.title}" and related screenshot files were permanently removed.`);
       }
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      await showErrorModal('Delete Failed', err.message);
     }
   }
 

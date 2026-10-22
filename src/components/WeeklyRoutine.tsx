@@ -10,6 +10,12 @@ import {
   Clock, 
   Info
 } from 'lucide-react';
+import { 
+  confirmDelete, 
+  confirmAction, 
+  showSuccessModal, 
+  showErrorModal 
+} from '../utils/sweetalert';
 
 interface WeeklyRoutineProps {
   currentRole: Role;
@@ -79,6 +85,15 @@ export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutin
     const finalSubject = formSubject === 'Custom' ? customSubject.trim() : formSubject;
     if (!finalSubject) return;
 
+    const isConfirmed = await confirmAction({
+      title: 'Add to Timetable?',
+      text: `Add "${finalSubject}" on ${formDay} to the weekly study routine?`,
+      confirmButtonText: 'Yes, Add Subject',
+      icon: 'question',
+      isSuccess: true
+    });
+    if (!isConfirmed) return;
+
     try {
       setSubmitting(true);
       const creatorName = currentUser?.name || (currentRole === 'student' ? 'Mohona' : 'Tutor Axis');
@@ -95,9 +110,10 @@ export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutin
         setRoutines(prev => [res.data, ...prev]);
         setIsAddOpen(false);
         setCustomSubject('');
+        await showSuccessModal('Routine Added!', `"${finalSubject}" scheduled for ${formDay}.`);
       }
     } catch (err: any) {
-      alert(`Error creating routine: ${err.message}`);
+      await showErrorModal('Creation Failed', err.message);
     } finally {
       setSubmitting(false);
     }
@@ -105,20 +121,24 @@ export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutin
 
   async function handleDelete(routine: RoutineItem) {
     if (currentRole !== 'tutor') {
-      alert('Permission Denied: Only your teacher/tutor (Tutor Axis) is authorized to delete routine entries. Students can add new routines anytime!');
+      await showErrorModal('Permission Denied', 'Only your tutor (Tutor Axis) is authorized to delete routine entries. Students can add new routines anytime!');
       return;
     }
 
-    const confirmed = window.confirm(`Delete routine for ${routine.day}: "${routine.subject}"?`);
-    if (!confirmed) return;
+    const isConfirmed = await confirmDelete(
+      `Delete Routine Entry?`,
+      `Remove "${routine.subject}" (${routine.day}) from the 7-day study timetable?`
+    );
+    if (!isConfirmed) return;
 
     try {
       const res = await api.deleteRoutine(routine.id, 'tutor');
       if (res.success) {
         setRoutines(prev => prev.filter(r => r.id !== routine.id));
+        await showSuccessModal('Deleted!', `Routine entry for ${routine.day} removed.`);
       }
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      await showErrorModal('Delete Failed', err.message);
     }
   }
 

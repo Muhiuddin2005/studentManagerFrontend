@@ -20,6 +20,7 @@ import {
 interface WeeklyRoutineProps {
   currentRole: Role;
   currentUser: User | null;
+  tupleId?: string | null;
 }
 
 const ALL_DAYS: DayOfWeek[] = [
@@ -32,7 +33,7 @@ const ALL_DAYS: DayOfWeek[] = [
   'Friday'
 ];
 
-export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutineProps) {
+export default function WeeklyRoutine({ currentRole, currentUser, tupleId }: WeeklyRoutineProps) {
   const [routines, setRoutines] = useState<RoutineItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isAddOpen, setIsAddOpen] = useState<boolean>(false);
@@ -64,12 +65,12 @@ export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutin
       clearInterval(timer);
       window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [tupleId]);
 
   async function loadRoutines(silent = false) {
     try {
       if (!silent) setLoading(true);
-      const res = await api.fetchRoutines();
+      const res = await api.fetchRoutines(tupleId || undefined);
       if (res.success) {
         setRoutines(res.data);
       }
@@ -98,6 +99,7 @@ export default function WeeklyRoutine({ currentRole, currentUser }: WeeklyRoutin
       setSubmitting(true);
       const creatorName = currentUser?.name || (currentRole === 'student' ? 'Mohona' : 'Tutor Axis');
       const res = await api.createRoutine({
+        tuple_id: tupleId || null,
         day: formDay,
         subject: finalSubject,
         topic: finalSubject,

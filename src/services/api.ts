@@ -7,7 +7,10 @@ import {
   RegisterInput,
   VerifyInput,
   LoginStepResult,
-  AuthSuccessResult
+  AuthSuccessResult,
+  TeacherProfile,
+  TutorStudentPair,
+  MyTuplesResponse
 } from '../types';
 
 function getBaseUrl(): string {
@@ -201,13 +204,16 @@ export interface FetchTasksResponse {
   data: Task[];
 }
 
-export async function fetchTasks(filter: { status?: string; student_id?: string } = {}): Promise<FetchTasksResponse> {
+export async function fetchTasks(filter: { status?: string; student_id?: string; tuple_id?: string } = {}): Promise<FetchTasksResponse> {
   const params = new URLSearchParams();
   if (filter.status && filter.status !== 'all') {
     params.append('status', filter.status);
   }
   if (filter.student_id) {
     params.append('student_id', filter.student_id);
+  }
+  if (filter.tuple_id) {
+    params.append('tuple_id', filter.tuple_id);
   }
 
   const url = `${API_BASE_URL}/tasks${params.toString() ? `?${params.toString()}` : ''}`;
@@ -297,7 +303,7 @@ export async function addComment(
 }
 
 export async function deleteTask(taskId: string, actorRole: Role = 'tutor'): Promise<{ success: boolean; message: string }> {
-  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}?actor_role=${encodeURIComponent(actorRole)}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -324,8 +330,9 @@ export async function clearAllDatabaseData(): Promise<{ success: boolean; messag
 // 7-Day Routine APIs
 // ==========================================
 
-export async function fetchWeeklyRoutine(): Promise<{ success: boolean; data: any[] }> {
-  const res = await apiFetch(`${API_BASE_URL}/routines`, {
+export async function fetchWeeklyRoutine(tupleId?: string): Promise<{ success: boolean; data: any[] }> {
+  const url = tupleId ? `${API_BASE_URL}/routines?tuple_id=${tupleId}` : `${API_BASE_URL}/routines`;
+  const res = await apiFetch(url, {
     headers: {
       ...getAuthHeaders()
     }
@@ -368,8 +375,9 @@ export async function deleteRoutineItem(id: string): Promise<{ success: boolean;
 }
 
 // Routine aliases for WeeklyRoutine component
-export async function fetchRoutines(): Promise<{ success: boolean; count: number; data: any[] }> {
-  const res = await apiFetch(`${API_BASE_URL}/routines`, {
+export async function fetchRoutines(tupleId?: string): Promise<{ success: boolean; count: number; data: any[] }> {
+  const url = tupleId ? `${API_BASE_URL}/routines?tuple_id=${tupleId}` : `${API_BASE_URL}/routines`;
+  const res = await apiFetch(url, {
     headers: {
       ...getAuthHeaders()
     }
@@ -402,6 +410,66 @@ export async function deleteRoutine(id: string, actorRole: Role): Promise<{ succ
 }
 
 // ==========================================
+// Teacher-Student Tuple / Pairing APIs
+// ==========================================
+
+export async function fetchTeachers(studentEmail?: string): Promise<{ success: boolean; count: number; data: TeacherProfile[] }> {
+  const url = studentEmail ? `${API_BASE_URL}/tuples/teachers?studentEmail=${encodeURIComponent(studentEmail)}` : `${API_BASE_URL}/tuples/teachers`;
+  const res = await apiFetch(url, {
+    headers: {
+      ...getAuthHeaders(),
+      ...(studentEmail ? { 'x-user-email': studentEmail } : {})
+    }
+  });
+  return handleResponse<{ success: boolean; count: number; data: TeacherProfile[] }>(res);
+}
+
+export async function fetchMyTuples(email: string, role: Role): Promise<{ success: boolean; data: MyTuplesResponse }> {
+  const res = await apiFetch(`${API_BASE_URL}/tuples/my-tuples?email=${encodeURIComponent(email)}&role=${role}`, {
+    headers: {
+      ...getAuthHeaders(),
+      'x-user-email': email,
+      'x-user-role': role
+    }
+  });
+  return handleResponse<{ success: boolean; data: MyTuplesResponse }>(res);
+}
+
+export async function requestTeacherConnection(params: {
+  tutor_email: string;
+  tutor_name?: string;
+  tutor_id?: string;
+  student_email: string;
+  student_name: string;
+  student_id?: string;
+}): Promise<{ success: boolean; message: string; data: TutorStudentPair }> {
+  const res = await apiFetch(`${API_BASE_URL}/tuples/request`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(params)
+  });
+  return handleResponse<{ success: boolean; message: string; data: TutorStudentPair }>(res);
+}
+
+export async function respondToTupleRequest(params: {
+  tuple_id: string;
+  status: 'accepted' | 'rejected';
+}): Promise<{ success: boolean; message: string; data: TutorStudentPair }> {
+  const res = await apiFetch(`${API_BASE_URL}/tuples/respond`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(params)
+  });
+  return handleResponse<{ success: boolean; message: string; data: TutorStudentPair }>(res);
+}
+
+// ==========================================
 // Attachment URL Helper
 // ==========================================
 
@@ -414,4 +482,5 @@ export function resolveAttachmentUrl(url: string | null | undefined): string {
   const base = API_BASE_URL.replace(/\/api\/?$/, '');
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
+
 

@@ -12,6 +12,8 @@ import WeeklyRoutine from './components/WeeklyRoutine';
 import Toast from './components/Toast';
 import LogoutConfirmModal from './components/LogoutConfirmModal';
 import LoginPage from './components/LoginPage';
+import TeacherDirectory from './components/TeacherDirectory';
+import StudentRequestsModal from './components/StudentRequestsModal';
 import { useAuth } from './context/AuthContext';
 import { StatusBadge, SubjectBadge } from './components/Badge';
 import * as api from './services/api';
@@ -21,7 +23,8 @@ import {
   Priority, 
   NewTaskInput, 
   AttachmentSubmitData, 
-  ServerStatus 
+  ServerStatus,
+  TutorStudentPair 
 } from './types';
 
 import { 
@@ -31,7 +34,9 @@ import {
   AlertCircle,
   Flag,
   ArrowRight,
-  Trash2
+  Trash2,
+  Users,
+  Bell
 } from 'lucide-react';
 import { 
   confirmDelete, 
@@ -45,7 +50,7 @@ export default function App() {
   const { 
     user: currentUser, 
     role, 
-    isAuthenticated,
+    isAuthenticated, 
     isInitializing,
     toast, 
     hideToast, 
@@ -60,13 +65,19 @@ export default function App() {
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [mobileTab, setMobileTab] = useState<string>('home');
 
+  // Teacher-Student Tuple & Pairing State
+  const [activeTuple, setActiveTuple] = useState<TutorStudentPair | null>(null);
+  const [acceptedTuples, setAcceptedTuples] = useState<TutorStudentPair[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<TutorStudentPair[]>([]);
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState<boolean>(false);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'teachers'>('dashboard');
+
   // Modals state
   const [isNewTaskOpen, setIsNewTaskOpen] = useState<boolean>(false);
   const [isAttachOpen, setIsAttachOpen] = useState<boolean>(false);
   const [targetTaskForAttach, setTargetTaskForAttach] = useState<Task | null>(null);
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-
 
   // New task form state
   const [newTaskForm, setNewTaskForm] = useState<NewTaskInput>({
@@ -82,15 +93,18 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
+      loadTuples();
       loadTasks();
 
       // Background silent polling every 6 seconds to keep student and tutor in sync
       const pollTimer = setInterval(() => {
+        loadTuples();
         loadTasks(true);
       }, 6000);
 
       // Sync immediately when student or tutor switches back to window/tab
       const handleFocus = () => {
+        loadTuples();
         loadTasks(true);
       };
       window.addEventListener('focus', handleFocus);
@@ -101,7 +115,7 @@ export default function App() {
       };
     }
     checkHealth();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentUser?.email, role, activeTuple?.id]);
 
   async function checkHealth() {
     try {
@@ -112,11 +126,55 @@ export default function App() {
     }
   }
 
+  async function loadTuples() {
+    if (!currentUser?.email) return;
+    try {
+      const res = await api.fetchMyTuples(currentUser.email, role);
+      if (res.success) {
+        setAcceptedTuples(res.data.accepted);
+        setPendingRequests(res.data.pending);
+
+        if (role === 'student') {
+          if (res.data.accepted.length > 0) {
+            setActiveTuple(prev => {
+              if (prev && res.data.accepted.some(t => t.id === prev.id)) return prev;
+              return res.data.accepted[0];
+            });
+          } else {
+            setActiveTuple(null);
+            // First time student has no teacher -> show teacher directory directly
+            setCurrentView('teachers');
+          }
+        } else {
+          // role === 'tutor'
+          if (res.data.accepted.length > 0) {
+            setActiveTuple(prev => {
+              if (prev && res.data.accepted.some(t => t.id === prev.id)) return prev;
+              return res.data.accepted[0];
+            });
+          } else {
+            setActiveTuple(null);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ Tuple load error:', err.message);
+    }
+  }
+
   async function loadTasks(silent = false) {
     try {
       if (!silent) setLoading(true);
       setError(null);
-      const res = await api.fetchTasks();
+
+      // If student has no accepted tutor yet, dashboard has 0 shared tasks
+      if (role === 'student' && !activeTuple) {
+        setTasks([]);
+        setSelectedTaskDetails(null);
+        return;
+      }
+
+      const res = await api.fetchTasks({ tuple_id: activeTuple?.id || undefined });
       if (res.success) {
         setTasks(res.data);
         setSelectedTaskDetails(prev => {
@@ -172,14 +230,15 @@ export default function App() {
     if (!isConfirmed) return;
 
     try {
-      const creatorName = currentUser?.name || (role === 'student' ? 'Mohona' : 'Tutor Axis');
+      const creatorName = currentUser?.name || (role === 'student' ? (activeTuple?.student_name || 'Mohona') : (activeTuple?.tutor_name || 'Tutor Axis'));
       const res = await api.createTask({
         ...newTaskForm,
+        tuple_id: activeTuple?.id || null,
         creator_role: role,
-        student_id: role === 'student' ? (currentUser?.id || 'student-1') : 'student-1',
-        student_name: role === 'student' ? (currentUser?.name || 'Mohona') : 'Mohona',
-        tutor_id: role === 'tutor' ? (currentUser?.id || 'tutor-1') : 'tutor-1',
-        tutor_name: role === 'tutor' ? (currentUser?.name || 'Tutor Axis') : 'Tutor Axis',
+        student_id: activeTuple?.student_id || (role === 'student' ? (currentUser?.id || 'student-1') : 'student-1'),
+        student_name: activeTuple?.student_name || (role === 'student' ? (currentUser?.name || 'Mohona') : 'Mohona'),
+        tutor_id: activeTuple?.tutor_id || (role === 'tutor' ? (currentUser?.id || 'tutor-1') : 'tutor-1'),
+        tutor_name: activeTuple?.tutor_name || (role === 'tutor' ? (currentUser?.name || 'Tutor Axis') : 'Tutor Axis'),
         initial_note: `Task initiated by ${creatorName}`
       });
 
@@ -336,138 +395,230 @@ export default function App() {
       <Navbar
         onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
         serverStatus={serverStatus}
+        pendingRequestsCount={pendingRequests.length}
+        onOpenRequestsModal={() => setIsRequestsModalOpen(true)}
+        onOpenTeacherDirectory={() => setCurrentView(v => v === 'teachers' ? 'dashboard' : 'teachers')}
+        activeTuple={activeTuple}
+        acceptedTuples={acceptedTuples}
+        onSelectTuple={(pair) => {
+          setActiveTuple(pair);
+          setCurrentView('dashboard');
+        }}
+        currentView={currentView}
+        onSwitchView={(v) => setCurrentView(v === 'teachers' ? 'teachers' : 'dashboard')}
       />
 
-
       <main className="main-content">
-        {/* Mockup-Style Goal Banner (Inspired by "🚩 Set your weekly goal! →" in reference) */}
-        <div 
-          className="goal-banner"
-          style={{
-            background: '#FFFFFF',
-            borderRadius: '999px',
-            border: '1px solid rgba(220, 224, 238, 0.8)',
-            padding: '0.65rem 1.25rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '1.5rem',
-            boxShadow: 'var(--shadow-sm)',
-            cursor: 'pointer'
-          }}
-          onClick={() => {
-            if (role === 'tutor') {
-              setIsNewTaskOpen(true);
-            } else {
-              document.getElementById('weekly-routine-section')?.scrollIntoView({ behavior: 'smooth' });
-            }
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              background: 'var(--pastel-lilac)',
-              color: 'var(--primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Flag size={14} />
-            </div>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              {role === 'student' ? 'Weekly Target: Follow 7-day study timetable' : 'Tutor Goal: Review pending student questions & assign lessons'}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 700 }}>
-            <span className="hide-on-mobile">{role === 'tutor' ? 'Assign Task' : 'View Timetable'}</span>
-            <ArrowRight size={15} />
-          </div>
-        </div>
-
-        {/* Hero Title Section matching Mockup */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          marginBottom: '1.25rem',
-          flexWrap: 'wrap',
-          gap: '0.5rem'
-        }}>
-          <div>
-            <h2 className="hero-title" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.03em' }}>
-              {role === 'student' ? 'Start Your Journey 📖' : 'Lesson Schedule & Courses 🎓'}
-            </h2>
-            <p className="hero-subtitle" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
-              {role === 'student' 
-                ? 'Manage your daily learning timeline and attach problem screenshots'
-                : 'Address student questions, review homework proofs, and verify progress'}
-            </p>
-          </div>
-        </div>
-
-        {/* 7-Day Study Routine Schedule (Student can create, only tutor can delete) */}
-        <WeeklyRoutine
-          currentRole={role}
-          currentUser={currentUser}
-        />
-
-
-        {/* Status Filter Tabs (Horizontal scroll on mobile) */}
-
-        <StatusFilter
-          currentFilter={activeFilter}
-          onFilterChange={setActiveFilter}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          counts={counts}
-        />
-
-        {/* Main Dashboard based on active role */}
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-muted)' }}>
-            <div className="animate-spin" style={{ display: 'inline-block', marginBottom: '1rem' }}>
-              <Clock size={32} color="var(--primary)" />
-            </div>
-            <p>Syncing lesson timeline...</p>
-          </div>
-        ) : error ? (
-          <div style={{
-            background: 'var(--pastel-pink)',
-            border: '1px solid var(--pastel-pink-border)',
-            borderRadius: 'var(--radius-card)',
-            padding: '1.5rem',
-            textAlign: 'center',
-            color: 'var(--pastel-pink-text)'
-          }}>
-            <AlertCircle size={24} style={{ marginBottom: '0.5rem' }} />
-            <p style={{ fontWeight: 700 }}>{error}</p>
-            <button className="btn btn-secondary btn-sm" onClick={loadTasks} style={{ marginTop: '0.5rem' }}>
-              Retry Connection
-            </button>
-          </div>
-        ) : role === 'student' ? (
-          <StudentDashboard
-            tasks={filteredTasks}
-            onStatusChange={handleStatusChange}
-            onOpenAttachModal={(t) => {
-              setTargetTaskForAttach(t);
-              setIsAttachOpen(true);
+        {/* If Student/Tutor is in Teachers Directory View */}
+        {currentView === 'teachers' ? (
+          <TeacherDirectory
+            activeTuple={activeTuple}
+            onSelectTuple={(pair) => {
+              setActiveTuple(pair);
+              setCurrentView('dashboard');
             }}
-            onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
-            onOpenPreviewImage={(url) => setPreviewImage(url)}
+            onRefresh={loadTuples}
           />
         ) : (
-          <TutorDashboard
-            tasks={filteredTasks}
-            onStatusChange={handleStatusChange}
-            onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
-            onOpenPreviewImage={(url) => setPreviewImage(url)}
-            onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
-            onDeleteTask={handleDeleteTask}
-          />
+          <>
+            {/* Tutor Notification Alert for Pending Student Requests */}
+            {role === 'tutor' && pendingRequests.length > 0 && (
+              <div 
+                onClick={() => setIsRequestsModalOpen(true)}
+                style={{
+                  background: '#FEF3C7',
+                  border: '1.5px solid #FCD34D',
+                  borderRadius: '18px',
+                  padding: '0.85rem 1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '1.25rem',
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.25rem' }}>🔔</span>
+                  <div>
+                    <strong style={{ color: '#92400E', fontSize: '0.9rem' }}>
+                      {pendingRequests.length} Student Connection {pendingRequests.length === 1 ? 'Request' : 'Requests'} Waiting
+                    </strong>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#B45309' }}>
+                      Click to review and accept students into your shared group.
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  className="btn btn-sm" 
+                  style={{ background: '#F59E0B', color: '#FFF', border: 'none', borderRadius: '999px', padding: '0.4rem 0.95rem', fontWeight: 700 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsRequestsModalOpen(true);
+                  }}
+                >
+                  Review Requests
+                </button>
+              </div>
+            )}
+
+            {/* Student Alert when no tutor is accepted yet */}
+            {role === 'student' && !activeTuple && (
+              <div style={{
+                background: 'var(--pastel-lilac)',
+                border: '1.5px solid var(--pastel-lilac-border)',
+                borderRadius: '22px',
+                padding: '1.75rem',
+                marginBottom: '1.75rem',
+                textAlign: 'center'
+              }}>
+                <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--primary)', fontWeight: 800, fontSize: '1.25rem' }}>
+                  Connect with a Teacher to Activate Your Dashboard 🎓
+                </h3>
+                <p style={{ margin: '0 0 1.25rem 0', color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '520px', marginInline: 'auto', lineHeight: 1.5 }}>
+                  You do not have an active teacher connection yet. Request a teacher from our verified tutor list to bind your accounts and start sharing homework tasks and 7-day schedules.
+                </p>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => setCurrentView('teachers')}
+                  style={{ marginInline: 'auto', padding: '0.6rem 1.4rem' }}
+                >
+                  <span>Browse Verified Teachers →</span>
+                </button>
+              </div>
+            )}
+
+            {/* Mockup-Style Goal Banner */}
+            <div 
+              className="goal-banner"
+              style={{
+                background: '#FFFFFF',
+                borderRadius: '999px',
+                border: '1px solid rgba(220, 224, 238, 0.8)',
+                padding: '0.65rem 1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '1.5rem',
+                boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                if (role === 'tutor') {
+                  setIsNewTaskOpen(true);
+                } else {
+                  document.getElementById('weekly-routine-section')?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: 'var(--pastel-lilac)',
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Flag size={14} />
+                </div>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  {role === 'student' 
+                    ? (activeTuple ? `Bound with Teacher: ${activeTuple.tutor_name}` : 'Request a Teacher to start learning!') 
+                    : (activeTuple ? `Managing Student: ${activeTuple.student_name}` : 'Awaiting student requests')}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 700 }}>
+                <span className="hide-on-mobile">{role === 'tutor' ? 'Assign Task' : 'View Timetable'}</span>
+                <ArrowRight size={15} />
+              </div>
+            </div>
+
+            {/* Hero Title Section */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              marginBottom: '1.25rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem'
+            }}>
+              <div>
+                <h2 className="hero-title" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.03em' }}>
+                  {role === 'student' ? 'Start Your Journey 📖' : 'Lesson Schedule & Courses 🎓'}
+                </h2>
+                <p className="hero-subtitle" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
+                  {role === 'student' 
+                    ? (activeTuple ? `Study timeline synchronized with ${activeTuple.tutor_name}` : 'Browse teachers and request connection')
+                    : (activeTuple ? `1-on-1 Workspace with ${activeTuple.student_name} (${activeTuple.student_email})` : 'Select or accept students to manage')}
+                </p>
+              </div>
+            </div>
+
+            {/* 7-Day Study Routine Schedule (Filtered by active Tuple) */}
+            <WeeklyRoutine
+              currentRole={role}
+              currentUser={currentUser}
+              tupleId={activeTuple?.id || null}
+            />
+
+            {/* Status Filter Tabs */}
+            <StatusFilter
+              currentFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              counts={counts}
+            />
+
+            {/* Main Dashboard based on active role */}
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-muted)' }}>
+                <div className="animate-spin" style={{ display: 'inline-block', marginBottom: '1rem' }}>
+                  <Clock size={32} color="var(--primary)" />
+                </div>
+                <p>Syncing lesson timeline...</p>
+              </div>
+            ) : error ? (
+              <div style={{
+                background: 'var(--pastel-pink)',
+                border: '1px solid var(--pastel-pink-border)',
+                borderRadius: 'var(--radius-card)',
+                padding: '1.5rem',
+                textAlign: 'center',
+                color: 'var(--pastel-pink-text)'
+              }}>
+                <AlertCircle size={24} style={{ marginBottom: '0.5rem' }} />
+                <p style={{ fontWeight: 700 }}>{error}</p>
+                <button className="btn btn-secondary btn-sm" onClick={() => loadTasks()} style={{ marginTop: '0.5rem' }}>
+                  Retry Connection
+                </button>
+              </div>
+            ) : role === 'student' ? (
+              <StudentDashboard
+                tasks={filteredTasks}
+                onStatusChange={handleStatusChange}
+                onOpenAttachModal={(t) => {
+                  setTargetTaskForAttach(t);
+                  setIsAttachOpen(true);
+                }}
+                onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
+                onOpenPreviewImage={(url) => setPreviewImage(url)}
+              />
+            ) : (
+              <TutorDashboard
+                tasks={filteredTasks}
+                onStatusChange={handleStatusChange}
+                onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
+                onOpenPreviewImage={(url) => setPreviewImage(url)}
+                onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
+                onDeleteTask={handleDeleteTask}
+              />
+            )}
+          </>
         )}
       </main>
 
@@ -778,6 +929,14 @@ export default function App() {
           </div>
         )}
       </Modal>
+
+      {/* MODAL 5: Student Requests Modal for Tutors */}
+      <StudentRequestsModal
+        isOpen={isRequestsModalOpen}
+        onClose={() => setIsRequestsModalOpen(false)}
+        pendingRequests={pendingRequests}
+        onRefresh={loadTuples}
+      />
 
       {/* Authentication Modal (Password-Only Login & Resend OTP Registration) */}
       <AuthModal />

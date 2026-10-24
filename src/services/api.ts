@@ -246,6 +246,29 @@ export async function createTask(taskData: any): Promise<{ success: boolean; dat
   return handleResponse<{ success: boolean; data: Task }>(res);
 }
 
+export async function updateTask(
+  taskId: string, 
+  taskData: {
+    title: string;
+    description?: string;
+    subject?: string;
+    priority?: string;
+    deadline?: string | null;
+    actor_role?: Role;
+    actor_name?: string;
+  }
+): Promise<{ success: boolean; data: Task }> {
+  const res = await apiFetch(`${API_BASE_URL}/tasks/${taskId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(taskData)
+  });
+  return handleResponse<{ success: boolean; data: Task }>(res);
+}
+
 export async function updateTaskStatus(
   taskId: string, 
   { status, actor_role, note, question_text }: { status: TaskStatus; actor_role?: Role; note?: string; question_text?: string }

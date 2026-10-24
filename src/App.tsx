@@ -35,7 +35,8 @@ import {
   ArrowRight,
   Trash2,
   Users,
-  Bell
+  Bell,
+  Pencil
 } from 'lucide-react';
 import { 
   confirmDelete, 
@@ -83,6 +84,7 @@ export default function App() {
 
   // Modals state
   const [isNewTaskOpen, setIsNewTaskOpen] = useState<boolean>(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isAttachOpen, setIsAttachOpen] = useState<boolean>(false);
   const [targetTaskForAttach, setTargetTaskForAttach] = useState<Task | null>(null);
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
@@ -232,47 +234,112 @@ export default function App() {
     }
   }
 
-  // Handle create task
-  async function handleCreateTask(e: React.FormEvent) {
+  // Open create task modal
+  function handleOpenCreateTask() {
+    setEditingTask(null);
+    setNewTaskForm({
+      title: '',
+      subject: 'Mathematics',
+      description: '',
+      priority: 'medium',
+      deadline: ''
+    });
+    setIsNewTaskOpen(true);
+  }
+
+  // Open edit task modal (available for both Student & Tutor)
+  function handleOpenEditTask(task: Task) {
+    setEditingTask(task);
+    setNewTaskForm({
+      title: task.title,
+      subject: task.subject,
+      description: task.description || '',
+      priority: task.priority,
+      deadline: task.deadline ? task.deadline.slice(0, 10) : ''
+    });
+    setIsNewTaskOpen(true);
+  }
+
+  // Handle create or update task
+  async function handleSaveTask(e: React.FormEvent) {
     e.preventDefault();
     if (!newTaskForm.title.trim()) return;
 
-    const isConfirmed = await confirmAction({
-      title: 'Assign New Task?',
-      text: `Assign "${newTaskForm.title}" (${newTaskForm.subject}) to the study timeline?`,
-      confirmButtonText: 'Yes, Assign Task',
-      icon: 'question',
-      isSuccess: true
-    });
-    if (!isConfirmed) return;
-
-    try {
-      const creatorName = currentUser?.name || (role === 'student' ? (activeTuple?.student_name || 'Mohona') : (activeTuple?.tutor_name || 'Tutor Axis'));
-      const res = await api.createTask({
-        ...newTaskForm,
-        tuple_id: activeTuple?.id || null,
-        creator_role: role,
-        student_id: activeTuple?.student_id || (role === 'student' ? (currentUser?.id || 'student-1') : 'student-1'),
-        student_name: activeTuple?.student_name || (role === 'student' ? (currentUser?.name || 'Mohona') : 'Mohona'),
-        tutor_id: activeTuple?.tutor_id || (role === 'tutor' ? (currentUser?.id || 'tutor-1') : 'tutor-1'),
-        tutor_name: activeTuple?.tutor_name || (role === 'tutor' ? (currentUser?.name || 'Tutor Axis') : 'Tutor Axis'),
-        initial_note: `Task initiated by ${creatorName}`
+    if (editingTask) {
+      // Edit existing task
+      const isConfirmed = await confirmAction({
+        title: 'Save Changes to Task?',
+        text: `Update details for "${newTaskForm.title}" (${newTaskForm.subject})?`,
+        confirmButtonText: 'Yes, Save Changes',
+        icon: 'question',
+        isSuccess: true
       });
+      if (!isConfirmed) return;
 
-      if (res.success) {
-        setTasks(prev => [res.data, ...prev]);
-        setIsNewTaskOpen(false);
-        setNewTaskForm({
-          title: '',
-          subject: 'Mathematics',
-          description: '',
-          priority: 'medium',
-          deadline: ''
+      try {
+        const actorName = currentUser?.name || (role === 'student' ? (activeTuple?.student_name || 'Mohona') : (activeTuple?.tutor_name || 'Tutor Axis'));
+        const res = await api.updateTask(editingTask.id, {
+          title: newTaskForm.title.trim(),
+          description: newTaskForm.description,
+          subject: newTaskForm.subject,
+          priority: newTaskForm.priority,
+          deadline: newTaskForm.deadline || null,
+          actor_role: role,
+          actor_name: actorName
         });
-        await showSuccessModal('Task Assigned!', `"${res.data.title}" has been assigned successfully.`);
+
+        if (res.success) {
+          setTasks(prev => prev.map(t => t.id === editingTask.id ? res.data : t));
+          setSelectedTaskDetails(prev => prev && prev.id === editingTask.id ? res.data : prev);
+          setIsNewTaskOpen(false);
+          setEditingTask(null);
+          await showSuccessModal('Task Updated!', `"${res.data.title}" has been updated successfully.`);
+        }
+      } catch (err: any) {
+        await showErrorModal('Update Failed', err.message);
       }
-    } catch (err: any) {
-      await showErrorModal('Creation Failed', err.message);
+    } else {
+      // Create new task (Both Student and Tutor can create)
+      const isConfirmed = await confirmAction({
+        title: role === 'student' ? 'Add New Study Task?' : 'Assign New Task?',
+        text: `${role === 'student' ? 'Add' : 'Assign'} "${newTaskForm.title}" (${newTaskForm.subject}) to the study timeline?`,
+        confirmButtonText: role === 'student' ? 'Yes, Add Task' : 'Yes, Assign Task',
+        icon: 'question',
+        isSuccess: true
+      });
+      if (!isConfirmed) return;
+
+      try {
+        const creatorName = currentUser?.name || (role === 'student' ? (activeTuple?.student_name || 'Mohona') : (activeTuple?.tutor_name || 'Tutor Axis'));
+        const res = await api.createTask({
+          ...newTaskForm,
+          tuple_id: activeTuple?.id || null,
+          creator_role: role,
+          student_id: activeTuple?.student_id || (role === 'student' ? (currentUser?.id || 'student-1') : 'student-1'),
+          student_name: activeTuple?.student_name || (role === 'student' ? (currentUser?.name || 'Mohona') : 'Mohona'),
+          tutor_id: activeTuple?.tutor_id || (role === 'tutor' ? (currentUser?.id || 'tutor-1') : 'tutor-1'),
+          tutor_name: activeTuple?.tutor_name || (role === 'tutor' ? (currentUser?.name || 'Tutor Axis') : 'Tutor Axis'),
+          initial_note: `Task initiated by ${creatorName}`
+        });
+
+        if (res.success) {
+          setTasks(prev => [res.data, ...prev]);
+          setIsNewTaskOpen(false);
+          setNewTaskForm({
+            title: '',
+            subject: 'Mathematics',
+            description: '',
+            priority: 'medium',
+            deadline: ''
+          });
+          await showSuccessModal(
+            role === 'student' ? 'Task Added!' : 'Task Assigned!', 
+            `"${res.data.title}" has been added to the study timeline.`
+          );
+        }
+      } catch (err: any) {
+        await showErrorModal('Creation Failed', err.message);
+      }
     }
   }
 
@@ -520,13 +587,7 @@ export default function App() {
                 boxShadow: 'var(--shadow-sm)',
                 cursor: 'pointer'
               }}
-              onClick={() => {
-                if (role === 'tutor') {
-                  setIsNewTaskOpen(true);
-                } else {
-                  document.getElementById('weekly-routine-section')?.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
+              onClick={() => handleOpenCreateTask()}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                 <div style={{
@@ -549,7 +610,7 @@ export default function App() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 700 }}>
-                <span className="hide-on-mobile">{role === 'tutor' ? 'Assign Task' : 'View Timetable'}</span>
+                <span className="hide-on-mobile">{role === 'tutor' ? 'Assign Task' : 'Add Study Task'}</span>
                 <ArrowRight size={15} />
               </div>
             </div>
@@ -624,6 +685,8 @@ export default function App() {
                 }}
                 onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
                 onOpenPreviewImage={(url) => setPreviewImage(url)}
+                onOpenNewTaskModal={handleOpenCreateTask}
+                onEditTask={handleOpenEditTask}
               />
             ) : (
               <TutorDashboard
@@ -631,21 +694,25 @@ export default function App() {
                 onStatusChange={handleStatusChange}
                 onOpenDetailsModal={(t) => setSelectedTaskDetails(t)}
                 onOpenPreviewImage={(url) => setPreviewImage(url)}
-                onOpenNewTaskModal={() => setIsNewTaskOpen(true)}
+                onOpenNewTaskModal={handleOpenCreateTask}
                 onDeleteTask={handleDeleteTask}
+                onEditTask={handleOpenEditTask}
               />
             )}
           </>
         )}
       </main>
 
-      {/* MODAL 1: Create New Study Task */}
+      {/* MODAL 1: Create / Edit Study Task */}
       <Modal
         isOpen={isNewTaskOpen}
-        onClose={() => setIsNewTaskOpen(false)}
-        title="Create Study Task"
+        onClose={() => {
+          setIsNewTaskOpen(false);
+          setEditingTask(null);
+        }}
+        title={editingTask ? 'Edit Study Task' : (role === 'student' ? 'Add Study Task' : 'Assign Study Task')}
       >
-        <form onSubmit={handleCreateTask}>
+        <form onSubmit={handleSaveTask}>
           <div className="form-group">
             <label className="form-label">Task Title *</label>
             <input
@@ -715,13 +782,16 @@ export default function App() {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setIsNewTaskOpen(false)}
+              onClick={() => {
+                setIsNewTaskOpen(false);
+                setEditingTask(null);
+              }}
             >
               Cancel
             </button>
             <button type="submit" className="btn btn-primary">
-              <Plus size={16} />
-              <span>Initialize Task</span>
+              {editingTask ? <Pencil size={15} /> : <Plus size={16} />}
+              <span>{editingTask ? 'Save Changes' : (role === 'student' ? 'Add Task' : 'Initialize Task')}</span>
             </button>
           </div>
         </form>
@@ -764,29 +834,43 @@ export default function App() {
                 )}
               </div>
 
-              {role === 'tutor' && (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
                 <button
-                  className="btn btn-sm"
-                  style={{
-                    background: '#FFF0F0',
-                    color: '#D32F2F',
-                    border: '1px solid #FFCDD2',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    fontWeight: 700,
-                    borderRadius: '8px',
-                    padding: '0.4rem 0.75rem',
-                    cursor: 'pointer',
-                    flexShrink: 0
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    const taskToEdit = selectedTaskDetails;
+                    setSelectedTaskDetails(null);
+                    handleOpenEditTask(taskToEdit);
                   }}
-                  onClick={() => handleDeleteTask(selectedTaskDetails)}
-                  title="Permanently Delete Task & Attachments"
+                  title="Edit Task Details"
                 >
-                  <Trash2 size={14} />
-                  <span>Delete Task</span>
+                  <Pencil size={13} />
+                  <span>Edit Task</span>
                 </button>
-              )}
+
+                {role === 'tutor' && (
+                  <button
+                    className="btn btn-sm"
+                    style={{
+                      background: '#FFF0F0',
+                      color: '#D32F2F',
+                      border: '1px solid #FFCDD2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      fontWeight: 700,
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.75rem',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => handleDeleteTask(selectedTaskDetails)}
+                    title="Permanently Delete Task & Attachments"
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete Task</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Timeline Audit History */}

@@ -10,7 +10,8 @@ import {
   RotateCcw, 
   History,
   Sparkles,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 
 interface TutorDashboardProps {
@@ -20,6 +21,7 @@ interface TutorDashboardProps {
   onOpenPreviewImage: (url: string) => void;
   onOpenNewTaskModal: () => void;
   onDeleteTask: (task: Task) => void;
+  onEditTask?: (task: Task) => void;
 }
 
 export const TutorDashboard: React.FC<TutorDashboardProps> = ({
@@ -28,7 +30,8 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
   onOpenDetailsModal,
   onOpenPreviewImage,
   onOpenNewTaskModal,
-  onDeleteTask
+  onDeleteTask,
+  onEditTask
 }) => {
   const updateRaisedTasks = tasks.filter(t => t.status === 'update raised');
   const otherTasks = tasks.filter(t => t.status !== 'update raised');
@@ -136,6 +139,16 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                         <CheckCircle2 size={14} />
                         <span>Verify & Done</span>
                       </button>
+                      {onEditTask && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => onEditTask(task)}
+                          title="Edit Task Details"
+                        >
+                          <Pencil size={13} />
+                          <span>Edit</span>
+                        </button>
+                      )}
                       <button
                         className="btn btn-sm"
                         style={{
@@ -322,6 +335,17 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
                     <MessageSquare size={14} />
                     <span>Provide Feedback</span>
                   </button>
+
+                  {onEditTask && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => onEditTask(task)}
+                      title="Edit Task Details"
+                    >
+                      <Pencil size={13} />
+                      <span>Edit</span>
+                    </button>
+                  )}
 
                   <button
                     className="btn btn-sm"

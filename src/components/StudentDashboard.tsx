@@ -10,7 +10,9 @@ import {
   Check, 
   History,
   Calendar,
-  AlertCircle 
+  AlertCircle,
+  Sparkles,
+  Pencil
 } from 'lucide-react';
 
 interface StudentDashboardProps {
@@ -19,6 +21,8 @@ interface StudentDashboardProps {
   onOpenAttachModal: (task: Task) => void;
   onOpenDetailsModal: (task: Task) => void;
   onOpenPreviewImage: (url: string) => void;
+  onOpenNewTaskModal?: () => void;
+  onEditTask?: (task: Task) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
@@ -26,7 +30,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onStatusChange,
   onOpenAttachModal,
   onOpenDetailsModal,
-  onOpenPreviewImage
+  onOpenPreviewImage,
+  onOpenNewTaskModal,
+  onEditTask
 }) => {
   if (tasks.length === 0) {
     return (
@@ -48,14 +54,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           No study tasks assigned
         </h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 auto', maxWidth: '420px' }}>
-          No homework or study tasks currently assigned. Your tutor (Tutor Axis) will assign new lessons and exercises here!
+          No homework or study tasks currently assigned. You can add your own study task or wait for your tutor to assign new lessons!
         </p>
+        {onOpenNewTaskModal && (
+          <button
+            className="btn btn-primary"
+            onClick={onOpenNewTaskModal}
+            style={{ marginTop: '1.25rem', padding: '0.6rem 1.4rem' }}
+          >
+            <Sparkles size={16} />
+            <span>Add Study Task</span>
+          </button>
+        )}
       </div>
     );
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+          Curriculum & Study Schedule ({tasks.length})
+        </h3>
+        {onOpenNewTaskModal && (
+          <button className="btn btn-secondary btn-sm" onClick={onOpenNewTaskModal}>
+            <Sparkles size={14} color="var(--primary)" />
+            <span>Add Task</span>
+          </button>
+        )}
+      </div>
       {tasks.map((task) => {
         const hasUpdateRaised = task.status === 'update raised';
         const isDone = task.status === 'done';
@@ -265,6 +292,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   <ImageIcon size={14} />
                   <span>Attach Question / Screenshot</span>
                 </button>
+
+                {/* Edit Task Action Button (Available to both Student & Tutor) */}
+                {onEditTask && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => onEditTask(task)}
+                    title="Edit Task Details"
+                  >
+                    <Pencil size={13} />
+                    <span>Edit</span>
+                  </button>
+                )}
 
                 {task.status === 'done' ? (
                   <span style={{
